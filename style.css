@@ -1,0 +1,103 @@
+:root {
+  --sky-top: #2e8fea;
+  --sky-mid: #5fb6f5;
+  --sky-low: #8fd3ff;
+  --grass: #5fbf6a;
+  --grass-dark: #3f8f49;
+  --ink: #17324d;
+  --ink-soft: #4a6580;
+  --card: #ffffff;
+  --line: #d9e8f5;
+  --sun: #ffc83d;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  color: var(--ink);
+  background: #f4f9fe;
+}
+a { color: #1d63b0; }
+a:hover { color: #0f4a8a; }
+
+/* ---- Header / hero ---------------------------------------------------- */
+.hero {
+  background: linear-gradient(var(--sky-top), var(--sky-mid) 55%, var(--sky-low));
+  color: #fff;
+  padding: 28px 16px 0;
+  overflow: hidden;
+}
+.nav {
+  max-width: 960px; margin: 0 auto 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 900; font-size: 18px; }
+.brand img { width: 36px; height: 36px; border-radius: 9px; box-shadow: 0 2px 0 rgba(0,0,0,.15); }
+.nav-links { display: flex; gap: 18px; }
+.nav-links a { color: #fff; text-decoration: none; font-weight: 700; font-size: 15px; opacity: .92; }
+.nav-links a:hover { opacity: 1; color: #fff; text-decoration: underline; }
+
+.hero-inner {
+  max-width: 960px; margin: 0 auto;
+  display: grid; grid-template-columns: 1.1fr .9fr; gap: 32px; align-items: end;
+}
+.hero-copy { padding-bottom: 56px; }
+.app-icon { width: 112px; height: 112px; border-radius: 26px; border: 5px solid rgba(255,255,255,.9); box-shadow: 0 10px 0 rgba(20,70,140,.3), 0 18px 40px rgba(0,0,0,.18); }
+h1 {
+  margin: 22px 0 8px; font-size: clamp(40px, 7vw, 64px); line-height: 1; font-weight: 900; letter-spacing: -1px;
+  text-shadow: 0 5px 0 #1d63b0;
+}
+.tagline { font-size: clamp(18px, 2.4vw, 22px); font-weight: 700; margin: 0 0 22px; max-width: 30ch; }
+.badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #111; color: #fff; border-radius: 14px; padding: 10px 18px; font-weight: 800; text-decoration: none;
+  box-shadow: 0 4px 0 rgba(0,0,0,.25);
+}
+.badge small { display: block; font-weight: 600; font-size: 11px; opacity: .8; line-height: 1.1; }
+.badge span { line-height: 1.15; }
+.phones { display: flex; gap: 14px; justify-content: center; align-self: end; }
+.phone {
+  width: 46%; max-width: 210px; border-radius: 26px 26px 0 0; overflow: hidden;
+  border: 6px solid #13283d; border-bottom: 0; background: #13283d;
+  box-shadow: 0 -6px 30px rgba(0,0,0,.18);
+}
+.phone img { display: block; width: 100%; height: auto; }
+.phone.tilt { transform: translateY(26px); }
+
+/* ---- Sections ---------------------------------------------------------- */
+main { max-width: 960px; margin: 0 auto; padding: 48px 16px 24px; }
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.feature { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+.feature .emoji { font-size: 30px; line-height: 1; }
+.feature h3 { margin: 10px 0 6px; font-size: 18px; }
+.feature p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+
+/* ---- Document pages (privacy, support) --------------------------------- */
+.doc-hero { padding-bottom: 36px; }
+.doc-hero h1 { font-size: clamp(32px, 6vw, 46px); margin-top: 6px; }
+.doc-hero p { margin: 0; font-weight: 600; opacity: .95; }
+.doc { max-width: 760px; }
+.doc h2 { font-size: 22px; margin: 34px 0 8px; }
+.doc p, .doc li { color: #24405c; }
+.doc ul { padding-left: 22px; }
+.doc .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin: 18px 0; }
+.doc .summary { border-left: 5px solid var(--grass); }
+.faq dt { font-weight: 800; margin-top: 18px; }
+.faq dd { margin: 4px 0 0; color: #24405c; }
+
+footer {
+  max-width: 960px; margin: 0 auto; padding: 28px 16px 40px;
+  display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between;
+  color: var(--ink-soft); font-size: 14px; border-top: 1px solid var(--line);
+}
+footer nav { display: flex; gap: 16px; }
+
+@media (max-width: 760px) {
+  .hero-inner { grid-template-columns: 1fr; gap: 8px; }
+  .hero-copy { padding-bottom: 24px; text-align: center; }
+  .tagline { margin-left: auto; margin-right: auto; }
+  .features { grid-template-columns: 1fr; }
+  .nav-links { gap: 14px; }
+  .nav-links a { font-size: 14px; }
+}
