@@ -1,0 +1,16 @@
+{
+  "name": "Sling & Slide",
+  "short_name": "Sling & Slide",
+  "description": "Launch your chick from a giant slingshot and slide as far as you can.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#7ec8f0",
+  "theme_color": "#2f8fe8",
+  "icons": [
+    { "src": "../assets/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "../assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
