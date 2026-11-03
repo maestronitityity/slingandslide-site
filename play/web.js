@@ -8,7 +8,7 @@
 // with ?shoptest in the address, which is how test payments are tried out.
 (() => {
   'use strict';
-  const API = '';
+  const API = 'https://sling-shop.slingandslide.workers.dev';
   const APP_MSG = 'Diamond packs and the Starter Pack are in the Sling & Slide app, coming soon to the App Store';
   const ITEM_OF = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5'];
   const ls = {
