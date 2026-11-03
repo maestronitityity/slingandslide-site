@@ -7,7 +7,7 @@ workers_dev = true
 
 [vars]
 # Google sign-in "Web application" OAuth client ID. Public, not a secret.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "434004095860-8gv5qj5f3n4o4v121hj9nl75cqth54lp.apps.googleusercontent.com"
 
 # Accounts, cloud saves and rankings live in one Durable Object with SQLite storage.
 [[durable_objects.bindings]]
