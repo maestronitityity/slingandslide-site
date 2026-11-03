@@ -11,6 +11,9 @@
 // Claiming again with the same device returns the same reward, and the game
 // ignores sessions it has already credited, so retries are safe.
 
+import { Hub, verifyGoogle } from './accounts.js';
+export { Hub };
+
 export const ITEMS = {
   p0: { name: '80 Diamonds', aud: 99, gems: 80, coins: 0 },
   p1: { name: '500 Diamonds', aud: 499, gems: 500, coins: 0 },
@@ -38,8 +41,8 @@ function cors(origin, env) {
   const ok = ALLOWED_ORIGINS.includes(origin) || extra.includes(origin);
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
@@ -159,16 +162,63 @@ async function claim(req, env, h) {
   return json({ state: 'paid', reward: reward(md.item) }, 200, h);
 }
 
+// ---- accounts, cloud saves, rankings (stored in the Hub Durable Object) ----
+const hub = (env) => env.HUB.get(env.HUB.idFromName('main'));
+async function hubCall(env, op, extra) {
+  const r = await hub(env).fetch('https://hub/', { method: 'POST', body: JSON.stringify({ op, ...extra }) });
+  return { status: r.status, body: await r.json() };
+}
+const bearer = (req) => ((req.headers.get('Authorization') || '').match(/^Bearer ([0-9a-f]{64})$/) || [])[1] || null;
+
+async function account(req, env, h, path) {
+  if (!env.HUB) return json({ error: 'not_configured' }, 503, h);
+  const m = req.method;
+  if (m === 'GET' && path === '/lb') {
+    const r = await hubCall(env, 'lb_get');
+    return json(r.body, r.status, { ...h, 'Cache-Control': 'no-store' });
+  }
+  if (m === 'POST' && path === '/auth/google') {
+    if (!env.GOOGLE_CLIENT_ID) return json({ error: 'not_configured' }, 503, h);
+    const b = await req.json().catch(() => ({}));
+    const sub = await verifyGoogle(b.credential, env);
+    if (!sub) return json({ error: 'bad_token' }, 401, h);
+    const r = await hubCall(env, 'login', { sub });
+    return json(r.body, r.status, h);
+  }
+  if (m === 'POST' && path === '/auth/google/redirect') {
+    // Google's redirect sign-in (used by the home-screen app, where pop-ups are unreliable):
+    // Google posts the token here as a form, and the player is sent back to the game
+    // with a session token in the address fragment (never sent to any server).
+    const back = (frag) => new Response(null, { status: 303, headers: { Location: (env.SITE_URL || SITE) + '#' + frag, 'Cache-Control': 'no-store' } });
+    if (!env.GOOGLE_CLIENT_ID) return back('ss_signin=fail');
+    const f = await req.formData().catch(() => null);
+    const sub = f && (await verifyGoogle(f.get('credential'), env));
+    if (!sub) return back('ss_signin=fail');
+    const r = await hubCall(env, 'login', { sub });
+    return r.body && r.body.token ? back('ss_tok=' + r.body.token) : back('ss_signin=fail');
+  }
+  const tok = bearer(req);
+  if (!tok) return json({ error: 'signed_out' }, 401, h);
+  const body = m === 'GET' ? null : await req.json().catch(() => ({}));
+  const op = { 'GET /me': 'me', 'POST /signout': 'signout', 'POST /me/nick': 'nick', 'POST /me/delete': 'delete',
+    'GET /save': 'save_get', 'PUT /save': 'save_put', 'POST /lb': 'lb_set' }[m + ' ' + path];
+  if (!op) return json({ error: 'not_found' }, 404, h);
+  const r = await hubCall(env, op, { tok, body });
+  return json(r.body, r.status, h);
+}
+const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
+
 export default {
   async fetch(req, env) {
     const h = cors(req.headers.get('Origin') || '', env);
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: h });
     const { pathname } = new URL(req.url);
     try {
+      if (ACCOUNT_PATHS.includes(pathname)) return await account(req, env, h, pathname);
       if (!env.STRIPE_KEY) return json({ error: 'not_configured' }, 503, h);
       if (req.method === 'GET' && pathname === '/config') {
         const items = Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, { aud: v.aud }]));
-        return json({ mode: modeOf(env.STRIPE_KEY), currency: 'aud', countries: COUNTRIES, items }, 200, h);
+        return json({ mode: modeOf(env.STRIPE_KEY), currency: 'aud', countries: COUNTRIES, items, google: env.GOOGLE_CLIENT_ID || null, accounts: !!env.HUB }, 200, h);
       }
       if (req.method === 'POST' && pathname === '/checkout') return await checkout(req, env, h);
       if (req.method === 'POST' && pathname === '/claim') return await claim(req, env, h);

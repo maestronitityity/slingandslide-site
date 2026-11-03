@@ -4,3 +4,16 @@ compatibility_date = "2024-09-23"
 workers_dev = true
 
 # Secret (set by the deploy workflow, never committed): STRIPE_KEY
+
+[vars]
+# Google sign-in "Web application" OAuth client ID. Public, not a secret.
+GOOGLE_CLIENT_ID = ""
+
+# Accounts, cloud saves and rankings live in one Durable Object with SQLite storage.
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Hub"]
