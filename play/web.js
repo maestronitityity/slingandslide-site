@@ -499,6 +499,113 @@
   })();
 })();
 
+// Keyboard controls (computers). Touch and mouse keep working as before.
+//   Slingshot:  hold Space (or W / ↑) to pull back, release to launch; A/D or ←/→ aim
+//   Run:        A/D or ←/→ steer · W/↑ dive · Space jump · R rocket · Esc/P pause
+//   Menus:      Space/Enter play · 1-4 pick a power-up · Space/Enter close a tip
+(() => {
+  'use strict';
+  const d = document, $ = (id) => d.getElementById(id);
+  const down = new Set();
+  let kSteer = 0, kHold = false, kPull = false, usedKeys = false, raf = 0, last = 0;
+  const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
+  const L = () => down.has('KeyA') || down.has('ArrowLeft');
+  const Rt = () => down.has('KeyD') || down.has('ArrowRight');
+  const DIVE = ['KeyW', 'ArrowUp'], PULL = ['Space', 'KeyW', 'ArrowUp'];
+  const overlay = () => !!($('lbm') || $('acm') || $('gm') || $('pzm') || $('gcp') || $('cfm') || (typeof setOpen !== 'undefined' && setOpen));
+  const SCROLL = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+
+  function tick(now) {
+    raf = 0;
+    const dt = Math.min(0.25, last ? (now - last) / 1000 : 1 / 60); last = now;
+    const ease = (rate) => 1 - Math.exp(-rate * dt); // same feel at any frame rate
+    try {
+      const dir = (Rt() ? 1 : 0) - (L() ? 1 : 0);
+      if (st === 'idle' && kPull) {
+        // pull back over ~0.8 s while the key is held
+        pull = Math.min(1, pull + dt / 0.8);
+        aim += (dir - aim) * ease(12); // D/→ aims right (same as dragging left on a touch screen)
+        aim = Math.max(-1, Math.min(1, aim));
+        px = -aim * 2.5;
+        const mx = pull >= 0.98;
+        $('pbar').style.display = 'block'; $('pbar').firstChild.style.height = pull * 100 + '%';
+        $('pbar').classList.toggle('max', mx); $('pbl').style.display = mx ? 'block' : 'none';
+      } else if (st === 'run' && !gPause && !tutPz) {
+        if (dir || kSteer) { kSteer += (dir - kSteer) * ease(26); if (!dir && Math.abs(kSteer) < 0.02) kSteer = 0; steer = kSteer; }
+        const dv = DIVE.some((k) => down.has(k));
+        if (dv) { hold = true; kHold = true; } else if (kHold) { hold = false; kHold = false; }
+      }
+    } catch (_) {}
+    if (down.size || kPull || kSteer) raf = requestAnimationFrame(tick); else last = 0;
+  }
+  const go = () => { if (!raf) raf = requestAnimationFrame(tick); };
+
+  function release() {
+    try {
+      if (kPull) {
+        kPull = false; dragging = false;
+        $('pbar').style.display = $('pbl').style.display = 'none';
+        if (st === 'idle') { if (pull > 0.12) launch(); else { pull = 0; px = 0; aim = 0; } }
+      }
+    } catch (_) {}
+  }
+
+  addEventListener('keydown', (e) => {
+    if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.code;
+    if (SCROLL.includes(k)) e.preventDefault();
+    if (e.repeat) { if (down.has(k)) return; }
+    down.add(k);
+    if (!usedKeys) { usedKeys = true; hints(); }
+    try {
+      // tips during a run: close with Space/Enter once they can be closed
+      if (tutPz && $('tut') && (k === 'Space' || k === 'Enter')) { if (performance.now() - tutT0 >= TUT_LOCK) tutHide(); return; }
+      if (k === 'Escape' || k === 'KeyP') {
+        if (st === 'run' && gPause) gameResume(); else if (st === 'run' && !tutPz) gamePause();
+        return;
+      }
+      if (st === 'menu' && !overlay() && (k === 'Space' || k === 'Enter')) { play(); return; }
+      if (st === 'pick' && /^Digit[1-9]$/.test(k)) { const b = d.querySelectorAll('#pick .pc')[+k.slice(5) - 1]; if (b) b.click(); return; }
+      if (st === 'idle' && PULL.includes(k) && !kPull && !dragging) { kPull = true; dragging = true; pull = 0; aim = 0; }
+      if (st === 'run' && !gPause && !tutPz) {
+        if (k === 'Space' && !e.repeat) { if (jmpN() < 1) scorePop('🔒 Unlock Jump in Skills', '#cfd8e6'); else doJump(); }
+        if (k === 'KeyR' && !e.repeat) doRocket();
+      }
+    } catch (_) {}
+    go();
+  });
+  addEventListener('keyup', (e) => {
+    const k = e.code;
+    if (SCROLL.includes(k) && !typing(e)) e.preventDefault(); // stops Space from also pressing a focused button
+    down.delete(k);
+    if (kPull && !PULL.some((x) => down.has(x))) release();
+    go();
+  });
+  const clear = () => { down.clear(); release(); try { if (kHold) hold = false; if (kSteer) steer = 0; } catch (_) {} kHold = false; kSteer = 0; };
+  addEventListener('blur', clear);
+  d.addEventListener('visibilitychange', () => { if (d.hidden) clear(); });
+
+  // The hint under the slingshot, and a one-off key guide for keyboard players.
+  function hints() {
+    try {
+      const h = $('hint'); if (h) h.innerHTML = 'Hold <b>Space</b> to pull back &amp; release · <b>A</b>/<b>D</b> or <b>←</b>/<b>→</b> to aim and steer';
+    } catch (_) {}
+    let n = 0; try { n = +localStorage.getItem('ss_keys') || 0; } catch (_) {}
+    if (n >= 3) return;
+    try { localStorage.setItem('ss_keys', String(n + 1)); } catch (_) {}
+    const g = d.createElement('div'); g.id = 'sskeys';
+    g.innerHTML = '<b>⌨️ Keyboard</b><span><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> steer</span><span><kbd>W</kbd> / <kbd>↑</kbd> dive</span><span><kbd>Space</kbd> jump</span><span><kbd>R</kbd> rocket</span><span><kbd>Esc</kbd> pause</span>';
+    g.style.cssText = 'position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 56px);transform:translateX(-50%);z-index:60;display:flex;flex-wrap:wrap;justify-content:center;gap:6px 12px;max-width:calc(100% - 24px);box-sizing:border-box;padding:9px 14px;border-radius:14px;background:rgba(19,40,61,.9);color:#fff;font:700 12px/1.6 system-ui,-apple-system,sans-serif;pointer-events:none;transition:opacity .6s';
+    const css = d.createElement('style');
+    css.textContent = '#sskeys b{color:#ffd23d;margin-right:2px}#sskeys kbd{display:inline-block;min-width:16px;padding:0 5px;margin:0 1px;border-radius:5px;background:#fff;color:#13283d;font:800 11px/18px system-ui,sans-serif;text-align:center;box-shadow:0 2px 0 #8aa0b8}#hint b{color:#ffd23d}';
+    d.head.appendChild(css); d.body.appendChild(g);
+    setTimeout(() => { g.style.opacity = '0'; setTimeout(() => g.remove(), 700); }, 9000);
+  }
+  if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    try { const h = $('hint'); if (h) h.innerHTML = 'Pull back &amp; release (or hold <b>Space</b>) · steer with the mouse, <b>A</b>/<b>D</b> or <b>←</b>/<b>→</b>'; } catch (_) {}
+  }
+})();
+
 // Full screen, app style. Browsers only allow full screen from a tap, so the
 // first tap on a phone or tablet (and every tap after leaving full screen)
 // switches it on. iPhones can't do this in Safari, so there they get a one-time
