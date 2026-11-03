@@ -1,0 +1,75 @@
+name: Deploy shop API
+
+# Puts shop-api/worker.js on Cloudflare Workers. Needs three repository secrets:
+#   CLOUDFLARE_API_TOKEN  (template "Edit Cloudflare Workers")
+#   CLOUDFLARE_ACCOUNT_ID
+#   STRIPE_KEY            (Stripe restricted key, test first, live later)
+# The result (address and test/live mode) shows as a notice on the run.
+
+on:
+  push:
+    branches: [main]
+    paths: ['shop-api/**', '.github/workflows/shop-api.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shop-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STRIPE_KEY: ${{ secrets.STRIPE_KEY }}
+        run: |
+          missing=""
+          [ -n "$CF_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CF_ACCOUNT" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$STRIPE_KEY" ] || missing="$missing STRIPE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::notice title=Shop API not deployed yet::Add these repository secrets, then run this workflow again:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          case "$STRIPE_KEY" in
+            rk_test_*|sk_test_*|rk_live_*|sk_live_*) ;;
+            pk_*) echo "::error title=Wrong Stripe key::STRIPE_KEY is a publishable key (pk_). Use a restricted key (rk_) or secret key (sk_)."; exit 1 ;;
+            *) echo "::error title=Wrong Stripe key::STRIPE_KEY should start with rk_test_, rk_live_, sk_test_ or sk_live_."; exit 1 ;;
+          esac
+
+      - name: Deploy worker
+        if: steps.check.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: shop-api
+          secrets: |
+            STRIPE_KEY
+        env:
+          STRIPE_KEY: ${{ secrets.STRIPE_KEY }}
+
+      - name: Report address and mode
+        if: steps.check.outputs.ready == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          sub=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/subdomain" | jq -r '.result.subdomain // empty')
+          if [ -z "$sub" ]; then echo "::error title=No workers.dev subdomain::Open Cloudflare > Workers & Pages once to pick a workers.dev subdomain, then re-run."; exit 1; fi
+          url="https://sling-shop.$sub.workers.dev"
+          cfg=""
+          for i in 1 2 3 4 5 6; do cfg=$(curl -fsS "$url/config" || true); [ -n "$cfg" ] && break; sleep 10; done
+          mode=$(echo "$cfg" | jq -r '.mode // "unreachable"' 2>/dev/null || echo unreachable)
+          echo "::notice title=Shop API::$url mode=$mode"
+          [ "$mode" = test ] || [ "$mode" = live ] || { echo "::error title=Shop API not answering::$url/config returned: $cfg"; exit 1; }
