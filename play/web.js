@@ -9,7 +9,7 @@
 (() => {
   'use strict';
   const API = 'https://sling-shop.slingandslide.workers.dev';
-  const APP_MSG = 'Diamond packs and the Starter Pack are in the Sling & Slide app, coming soon to the App Store';
+  const APP_MSG = 'Diamond packs and the Starter Pack are in the Sling & Slide app, out now on the App Store';
   const ITEM_OF = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5'];
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },

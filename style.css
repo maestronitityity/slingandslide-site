@@ -63,6 +63,8 @@ h1 {
 .play-btn small { font-size: 11px; font-weight: 700; opacity: .75; }
 .play-btn:hover { filter: brightness(1.05); }
 .play-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #c99a00; }
+a.badge { text-decoration: none; }
+a.badge:hover { filter: brightness(1.08); }
 .badge small { display: block; font-weight: 600; font-size: 11px; opacity: .8; line-height: 1.1; }
 .badge span { line-height: 1.15; }
 .phones { display: flex; gap: 14px; justify-content: center; align-self: end; }
