@@ -63,10 +63,10 @@
   }
 
   // ---- join with Game Center ----------------------------------------------------
-  let joining = false;
+  let joining = false, joinErr = '';
   async function join() {
     if (off() || joining || !gcOn() || !window.GCP || !window.GCP.identity) return;
-    joining = true;
+    joining = true; joinErr = '';
     try {
       const idn = await window.GCP.identity();
       const r = await api('POST', '/auth/gamecenter', idn);
@@ -74,11 +74,22 @@
         tok = r.j.token; me = { id: r.j.id, nick: r.j.nick };
         ls.set('ss_tok', tok); ls.set('ss_me', JSON.stringify(me));
         link();
-      }
-    } catch (_) {}
+      } else joinErr = 'the rankings server said ' + ((r.j && r.j.error) || 'HTTP ' + r.s);
+    } catch (e) { joinErr = String((e && e.message) || e) || 'no connection'; }
     joining = false;
+    if (joinErr) refresh();
   }
   addEventListener('gc-auth', () => join());
+  addEventListener('gc-state', () => refresh());
+  // Why Game Center isn't signed in (Apple's own message where there is one), with Try again.
+  const gcWhy = () => {
+    const i = (window.GC && window.GC.info) || {};
+    if (i.waitingForSheet) return 'Game Center wants to show a sign-in screen. Tap Try again.';
+    if (i.error) return 'Game Center says: “' + esc(i.error) + '”';
+    return window.GC && window.GC.info ? 'Game Center isn\u2019t signed in for this game yet.' : 'Connecting to Game Center…';
+  };
+  const retryBtn = (id) => (window.GC && window.GC.retry ? `<button id=${id}>Try again</button>` : '');
+  const wireRetry = (root, id) => { const b = root.querySelector('#' + id); if (b) b.onclick = () => { b.disabled = true; b.textContent = 'Trying…'; window.GC.retry().finally(() => refresh()); }; };
   d.addEventListener('visibilitychange', () => { if (!d.hidden && !tok) join(); });
 
   // ---- rankings window: who you are, or how to join ---------------------------
@@ -90,8 +101,8 @@
       const gcb = gcOn() ? '<button id=ssgc>Game Center</button>' : '';
       if (off()) row.innerHTML = `<div class=ssme>You're not in Global Rankings.</div><button id=ssjn>Join</button>`;
       else if (tok && me) row.innerHTML = `<div class=ssme>Playing as <b>${esc(me.nick || '')}</b></div>${gcb}`;
-      else if (gcOn()) row.innerHTML = `<div class=ssme>Joining Global Rankings…</div>${gcb}`;
-      else row.innerHTML = `<div class=ssme>Sign in to Game Center to post your scores (Settings app → Game Center).</div>`;
+      else if (gcOn()) { row.innerHTML = joinErr ? `<div class=ssme>Couldn't join Global Rankings (${esc(joinErr)}).</div><button id=ssjr>Try again</button>${gcb}` : `<div class=ssme>Joining Global Rankings…</div>${gcb}`; const jr = row.querySelector('#ssjr'); if (jr) jr.onclick = () => { jr.disabled = true; join(); }; }
+      else { row.innerHTML = `<div class=ssme>${gcWhy()} Your scores post once you're signed in to Game Center.</div>${retryBtn('ssgr')}`; wireRetry(row, 'ssgr'); }
       const g = row.querySelector('#ssgc'); if (g) g.onclick = () => { try { window.GCP.showLeaderboard({}); } catch (_) {} };
       const jn = row.querySelector('#ssjn'); if (jn) jn.onclick = () => { ls.del('ss_lb_off'); join(); refresh(); };
     }
@@ -126,7 +137,8 @@
         else toast("Couldn't remove right now. Check your connection and try again.");
       };
     } else {
-      box.innerHTML = `<b>Global Rankings</b><div class=ssme>${gcOn() ? 'Joining…' : 'Sign in to Game Center (Settings app → Game Center) to post your scores to Global Rankings.'}</div>`;
+      box.innerHTML = `<b>Global Rankings</b><div class=ssme>${gcOn() ? (joinErr ? 'Couldn\u2019t join: ' + esc(joinErr) : 'Joining…') : gcWhy() + ' Your scores post to Global Rankings once you\u2019re signed in to Game Center.'}</div>${gcOn() ? '' : '<div class=ssrow>' + retryBtn('ssgr2').replace('<button', '<button class=ssb2') + '</div>'}`;
+      wireRetry(box, 'ssgr2');
     }
     dataBox.parentNode.insertBefore(box, dataBox);
     return r;

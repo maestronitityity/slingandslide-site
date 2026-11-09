@@ -10,6 +10,19 @@
 
   const platform = C.getPlatform();
   const NP = C.registerPlugin('NativePurchases');
+  // GameCenter is part of this app (GameCenterPlugin.swift, registered in MainViewController)
+  // rather than an npm plugin, and Capacitor doesn't list app-registered plugins for the
+  // web page, so registerPlugin() alone reports it as "not implemented". Describe it
+  // ourselves (same shape Capacitor generates) before registering.
+  if (platform === 'ios') {
+    const H = (C.PluginHeaders = C.PluginHeaders || []);
+    if (!H.some((h) => h.name === 'GameCenter')) {
+      H.push({ name: 'GameCenter', methods: [
+        ...['authenticate', 'status', 'submitScore', 'showLeaderboard', 'identity', 'removeListener'].map((name) => ({ name, rtype: 'promise' })),
+        { name: 'addListener', rtype: 'callback' },
+      ] });
+    }
+  }
   const GCP = platform === 'ios' ? C.registerPlugin('GameCenter') : null;
 
   // ---- Product and leaderboard IDs (must match App Store Connect) ----------
@@ -197,15 +210,20 @@
     };
 
     window.GCP = GCP; // used by rankings.js
-    const authed = (r) => { const was = GC.ok; GC.ok = !!(r && r.authenticated); if (GC.ok && !was) dispatchEvent(new Event('gc-auth')); };
+    // GC.info keeps Game Center's last answer (error text etc.) for the rankings screen.
+    const authed = (r) => { const was = GC.ok; GC.info = r || null; GC.ok = !!(r && r.authenticated); dispatchEvent(new Event(GC.ok && !was ? 'gc-auth' : 'gc-state')); };
+    GC.retry = () => GCP.authenticate({ retry: true }).then(authed).catch((e) => authed({ authenticated: false, error: String((e && e.message) || e) }));
+    // Sign-in can finish after launch without telling us (or need the app on screen): check again when the game comes back.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !GC.ok) GCP.status().then(authed).catch(() => {}); });
     GCP.addListener('authChanged', authed).catch(() => {});
     GCP.authenticate()
       .then((r) => {
         authed(r);
+        if (!GC.ok) setTimeout(() => { if (!GC.ok) GCP.status().then(authed).catch(() => {}); }, 4000);
         // Carry over the best distance and best score set before Game Center was signed in.
         if (GC.ok) { submit(save.best, [LB_ALL_TIME]); submit(save.bs, ['best_score']); }
       })
-      .catch(() => {});
+      .catch((e) => authed({ authenticated: false, error: String((e && e.message) || e) }));
 
     // Post every finished run; Game Center keeps each player's best.
     const origEnd = window.end;
