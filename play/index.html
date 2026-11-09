@@ -346,6 +346,9 @@ body.inmenu #d,body.inmenu #c{visibility:hidden}
 /* inner price chips sit inside a card: lighter shadow so they don't look stacked */
 #menu .sc u,#menu .card button{box-shadow:inset 0 2px 0 rgba(255,255,255,.5),inset 0 -2px 0 rgba(0,0,0,.15),0 0 0 1.5px var(--e),0 3px 0 var(--e)!important}
 #menu .card.off button{--c1:#b3a7af;--c2:#7d6f78;--e:#4b4148}
+/* paying in diamonds: purple */
+#menu .card.gemc button{--c1:#dc96ff;--c2:#9a3fe0;--e:#561c8e}
+#menu .card.gemc.off button{--c1:#b3a7af;--c2:#7d6f78;--e:#4b4148}
 /* purple: roll x10, infinite skills, prizes */
 #menu .gb.ten,#menu .tn.inf,#menu .nd.inf,.rsg.p{--c1:#dc96ff;--c2:#9a3fe0;--e:#561c8e}
 /* teal: maxed */
@@ -1176,7 +1179,7 @@ $('pzb').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation
 /* Jump: upward boost from the ground (g) and in the air (a). For wt seconds after a jump (or until you land) you weigh
    heavy x more, so jumps peak lower and don't float; slingshot flights are unaffected. (Was 15.5 / 13, no extra weight.) */
 const JMP={g:14.5,a:12.2,heavy:1.12,wt:1.4};let jWt=0;
-function doJump(){if(st!=='run'||jl<=0||jcd>0||jmpN()<1)return;AU.sfx('jump',jl<jmpN()?1:0);hap('light');qAdd('jump',1);jl--;jcd=.18;jWt=JMP.wt;if(gr){const s=slope(d),n=Math.hypot(1,s);vx=v/n;vy=v*s/n+JMP.g;gr=false;airT=0}else{vy=Math.max(vy,0)+JMP.a;airT=0}sq=.5;shake=Math.max(shake,.12);if(!wingG)wingG=mkWings();if(chickG&&wingG.parent!==chickG)chickG.add(wingG);wingT=1;if(typeof padBlob==='function'&&gFx)padBlob(rider.position.x,Hf(d)+.1,rider.position.z,0,0,1.2,.4,rider.rotation)}
+function doJump(){if(st!=='run'||jl<=0||jcd>0||jmpN()<1)return;AU.sfx('jump',jl<jmpN()?1:0);qAdd('jump',1);jl--;jcd=.18;jWt=JMP.wt;if(gr){const s=slope(d),n=Math.hypot(1,s);vx=v/n;vy=v*s/n+JMP.g;gr=false;airT=0}else{vy=Math.max(vy,0)+JMP.a;airT=0}sq=.5;shake=Math.max(shake,.12);if(!wingG)wingG=mkWings();if(chickG&&wingG.parent!==chickG)chickG.add(wingG);wingT=1;if(typeof padBlob==='function'&&gFx)padBlob(rider.position.x,Hf(d)+.1,rider.position.z,0,0,1.2,.4,rider.rotation)}
 function launch(){AU.sfx('launch');hap('heavy');if(pull>=.98)qAdd('maxl',1);jl=jmpN();jcd=0;jWt=0;const s=pwr()*(.4+.6*pull),a=.16;vx=Math.cos(a)*s;vy=Math.sin(a)*s;lv=aim*s*.3;gr=false;airT=0;st='run';d-=pull*4;pull=0;$('hint').style.display='none';if(!(save.tut&&save.tut.rocks))setTimeout(()=>{if(st==='run')tutShow('rocks')},900)}
 // ---- menu / upgrades ----
 // ---- roguelike power-ups: every MILE metres the run pauses and you pick 1 of 3 ----
@@ -1185,7 +1188,7 @@ const MILE=2000,POOL=[['rocket','🚀','Rocket Start','Instant burst of speed'],
 ['wind','💨','Tailwind','Hills slow you down less'],['pad','⚡','Super Boosts','Boost pads 10% stronger'],['steer','🎯','Nimble Chick','Steer faster']];
 let pw={},got=[],shield=0,nextPick=MILE,inv=0,cd=0,lastN=0;
 let pickAt=0;
-let glassRun=0,pullN=0,pullHold=0;
+let glassRun=0,pullN=0,pullHold=0,rkHap=0;
 function pickStart(){pickAt=performance.now()+500;AU.sfx('pick');hap('medium');st='pick';hold=false;steer=0;confetti(150,'both');setTimeout(()=>confetti(70,'rain'),350);const m=nextPick;nextPick+=MILE;if(m>=6000&&!glassRun){glassRun=1;AU.glass()}
  const ch=POOL.slice().sort(()=>Math.random()-.5).slice(0,3+sk('c3')),el=$('pick');el.style.display='flex';
  el.innerHTML=`<h2>🎉 ${m} m! 🎉</h2><div class=sub>Choose a power-up</div>`+ch.map(p=>`<button class=pc onclick="choose('${p[0]}')"><div class=e>${p[1]}</div><div><b>${p[2]}</b><span>${p[3]}</span></div></button>`).join('');el.classList.add('wait');setTimeout(()=>el.classList.remove('wait'),500)}
@@ -1457,6 +1460,9 @@ drg=()=>.005/Math.pow(1+(.9*(save.sl+save.ld)+.6*save.ck)/35,.6)*Math.pow(.97,eL
 const STAT={sl:['Launch power',()=>pwr(),v=>v.toFixed(2)],ck:['Launch power',()=>pwr(),v=>v.toFixed(2)],ld:['Glide',()=>3.6/fr(),v=>'x'+v.toFixed(2)],inc:['Coin bonus',()=>mul(),v=>'x'+v.toFixed(2)]};
 const cost=k=>{const l=save[k],c=k==='ck'?55+30*l+2*l*l:20+14*l+1.2*l*l;return Math.round(c/5)*5};
 const CARD=[['sl','Slingshot','🏹'],['ld','Ride','🥏'],['inc','Income','🪙']];
+/* Not enough coins for a main upgrade? Pay in diamonds instead: the first 10 diamond upgrades of each stat cost 💎1,
+   the next 10 cost 💎2, then 💎3 ... (counted per stat in save.gu). Coins are always used first. */
+const gcost=k=>1+Math.floor(((save.gu||{})[k]|0)/10),gemMode=k=>save.coins<cost(k);
 let setOpen=0,rs=0,tab='garage',bnc='',fxOk=0,fxBad=0;
 document.getElementById('menu').addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(b)bnc=b.dataset.k},true);
 function burst(el,n,far){n=n||10;const r=el.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;for(let i=0;i<n;i++){const p=document.createElement('i');p.className='spk';const a=i/n*6.28+Math.random()*.4,dd=(far?54:36)+Math.random()*(far?46:30);p.style.cssText='left:'+cx+'px;top:'+cy+'px;--dx:'+Math.cos(a)*dd+'px;--dy:'+Math.sin(a)*dd+'px'+(far&&i%3?';background:'+CFC[i%CFC.length]:'');document.body.appendChild(p);setTimeout(()=>p.remove(),600)}}
@@ -1501,7 +1507,7 @@ function showMenu(msg){lastMsg=msg;const m=$('menu');const op=m.querySelector('.
  const pips=l=>{const f=l?((l-1)%5)+1:0;return [0,1,2,3,4].map(j=>`<i class="${j<f?'on':''}"></i>`).join('')},g=tab==='garage',nd=need(save.lvl);
  const head=t=>`<div class=ph><div><b>${t}</b><small>Level ${save.lvl+1} · ${Math.floor(save.xp)}/${nd} XP</small></div><button class=pl onclick="play()">PLAY</button></div><div class=xpbar><i style="width:${save.xp/nd*100}%"></i></div>`;
  let body='';
- if(g)body=`<div class=cards>`+CARD.map(([k,n,e])=>`<div data-k="c${k}" class="card${save.coins>=cost(k)?'':' off'}"><div class=ch><span>${n}</span><em>${save[k]}</em></div><div class=ic>${e}</div><div class=st>${STAT[k][0]}: ${STAT[k][2](STAT[k][1]())}</div><div class=pips>${pips(save[k])}</div><button onclick="buy('${k}')">UPGRADE<b>🪙 ${cost(k)}</b></button></div>`).join('')+`</div>`;
+ if(g)body=`<div class=cards>`+CARD.map(([k,n,e])=>{const gm=gemMode(k),ok=gm?save.gems>=gcost(k):true;return `<div data-k="c${k}" class="card${ok?'':' off'}${gm?' gemc':''}"><div class=ch><span>${n}</span><em>${save[k]}</em></div><div class=ic>${e}</div><div class=st>${STAT[k][0]}: ${STAT[k][2](STAT[k][1]())}</div><div class=pips>${pips(save[k])}</div><button onclick="buy('${k}')">UPGRADE<b>${gm?'💎 '+gcost(k):'🪙 '+cost(k)}</b></button></div>`}).join('')+`</div>`;
  else if(tab==='gacha')body=gachaHTML();
  else if(tab==='shop')body=shopHTML();
  else if(tab==='skills')body=`<div class="panel tall">${head('⭐ '+save.sp+' skill point'+(save.sp===1?'':'s'))}<div class=tsub>Tap a skill for details. Spend points in a branch to unlock higher tiers. ∞ skills never cap. You earn +3 ⭐ per level.</div>${skSpent()?'<button class=skrs onclick="skReset()">🔄 Reset skills &amp; refund points</button>':''}<div class=tree>`+SKT.map(b=>{const bp=brPts(b);return `<div class=br>`+b.s.slice().reverse().map((k,jj)=>{const lv=sk(k.id),tl=bp<TR[k.t],pl=skPre(k),lk=tl||pl,mx=lv>=k.m,ok=!lk&&!mx&&save.sp>=skCost(k,lv),inf=k.m>1e6;return `<button data-k="n${k.id}" class="tn${(k.id==='d1'||k.id==='d2')&&lv<1?' tp':''}${lk?' lk':''}${mx?' mx':''}${ok?' ok':''}${inf?' inf':''}${skSelId===k.id?' sel':''}" onclick="skPick('${k.id}')"><span class=ni>${lk?'🔒':k.i}</span><b>${k.n}</b><em>${inf?'Lv '+lv:lv+'/'+k.m}</em></button><div class=ln></div>`}).join('')+`<div class=bn>${b.i} ${b.n}<small>${bp} pts</small></div></div>`}).join('')+`</div>`+skDetail()+`</div>`;
@@ -1587,7 +1593,7 @@ function setTrk(i){SET.trk=i;persist();AU.track(i);if((SET.mus??.5)<.05){SET.mus
 function setDef(){Object.assign(SET,{zoom:1.8,ch:1,sh:1});persist();renderSet()}
 function resetSave(){if(!rs){rs=1;renderSet();return}save={coins:0,gems:0,sl:0,gl:0,inc:0,ck:0,ld:0,best:0,xp:0,lvl:0,sp:0,sk:{},runs:0,tot:0,char:'chick',dev:'lid',own:{chick:1,lid:1},pity:0,npity:0,ach:{},set:SET};persist();dress();rs=0;setOpen=0;renderSet();showMenu('Progress reset')}
 let upT=0;
-function buy(k){const c=cost(k);if(save.coins<c){fxBad=1;showMenu(lastMsg);return}fxOk=1;const [n,f,fmt]=STAT[k],b=f();save.coins-=c;save[k]++;persist();dress();showMenu(lastMsg);
+function buy(k){const c=cost(k),gm=save.coins<c&&CARD.some(x=>x[0]===k),g=gcost(k);if(gm?save.gems<g:save.coins<c){fxBad=1;showMenu(lastMsg);return}fxOk=1;const [n,f,fmt]=STAT[k],b=f();if(gm){save.gems-=g;save.gu=save.gu||{};save.gu[k]=(save.gu[k]|0)+1}else save.coins-=c;save[k]++;persist();dress();showMenu(lastMsg);
  const a=f(),good=k==='ld'?a<b:a>b,mx=Math.max(a,b)*1.08,lbl=k==='ck'?'Chick':k==='ld'?'Lid':k==='sl'?'Slingshot':'Income';
  const pct=x=>Math.min(100,Math.max(0,x/mx*100)),df=a-b,u=$('up');
  u.innerHTML=`<b>${lbl} → Lv ${save[k]}</b><div class=row><span>${n}</span><em>${fmt(b)} → ${fmt(a)}</em></div><div class=row><span>Change</span><span>${df>=0?'+':''}${df.toFixed(2)} (${df>=0?'+':''}${(df/b*100).toFixed(2)}%)</span></div><div class=bar><i style="width:${pct(b)}%"></i><u style="width:0"></u></div>`;
@@ -1607,23 +1613,26 @@ function cfAssets(){if(cfGeo)return;const cv=document.createElement('canvas');cv
  const tx=new THREE.CanvasTexture(cv);cfGeo=new THREE.CylinderGeometry(.48,.48,.12,22);
  const face=new THREE.MeshLambertMaterial({map:tx,emissive:0x3d2a00});cfMat=[new THREE.MeshLambertMaterial({color:0xe8a20c,emissive:0x5c3b00}),face,face];
  cfGG=new THREE.OctahedronGeometry(.38,0);cfGM=new THREE.MeshLambertMaterial({color:0x5cc8ff,emissive:0x0b3a6a})}
-function cfStart(coins,gems){cfAssets();cfClear();cfT0=performance.now();cfY0=rider.position.y;cfN=0;
- cfLeft=coins>0?Math.min(70,6+Math.round(1.6*Math.sqrt(coins))):0;cfGLeft=Math.min(12,(gems|0)*2);cfRate=cfLeft+cfGLeft;/* all released within 0.9 s of real time */
+/* succ: how good the run was, from .15 (far short of your best) to 1 (matched it); 1.4 = new personal best (bigger, taller, two waves) */
+let cfSucc=1,cfWave2=0;
+function cfStart(coins,gems,succ){cfAssets();cfClear();cfT0=performance.now();cfY0=rider.position.y;cfN=0;cfSucc=succ==null?1:succ;cfWave2=cfSucc>1?1:0;
+ cfLeft=coins>0?Math.min(cfSucc>1?90:70,Math.max(3,Math.round((6+1.6*Math.sqrt(coins))*(.3+.7*Math.min(1,cfSucc))*(cfSucc>1?1.3:1)))):0;cfGLeft=Math.min(12,(gems|0)*2);cfRate=cfLeft+cfGLeft;/* all released within 0.9 s of real time */
  if(coins>0)scorePop('+'+coins.toLocaleString()+' 🪙','#ffd23d')}
 function cfOne(gem){const m=new THREE.Mesh(gem?cfGG:cfGeo,gem?cfGM:cfMat),R=Math.random,a=R()*6.283,h=1.1+R()*2.4;
  m.position.set(rider.position.x+(R()-.5)*.3,rider.position.y+.9,rider.position.z+(R()-.5)*.3);m.rotation.set(R()*6,R()*6,R()*6);S.add(m);
- fnCoins.push({m,vx:Math.cos(a)*h,vz:Math.sin(a)*h,vy:9.5+R()*5.5,sx:(R()-.5)*16,sz:(R()-.5)*16,t:0,L:1.25+R()*.6})}
-function cfStep(dt){if(!fnCoins.length&&!cfLeft&&!cfGLeft)return;
+ fnCoins.push({m,vx:Math.cos(a)*h,vz:Math.sin(a)*h,vy:(7+5*Math.min(1.3,cfSucc))+R()*5.5,sx:(R()-.5)*16,sz:(R()-.5)*16,t:0,L:1.25+R()*.6})}
+function cfStep(dt){if(!fnCoins.length&&!cfLeft&&!cfGLeft&&!cfWave2)return;
+ if(cfWave2&&!cfLeft&&!cfGLeft&&performance.now()-cfT0>1000){cfWave2=0;cfLeft=Math.round(cfRate*.6);cfRate+=cfLeft;hap('success')}
  if(cfLeft||cfGLeft){let k=Math.max(1,Math.ceil(cfRate*Math.min(1,(performance.now()-cfT0)/900))-cfN);while(k-->0&&(cfLeft||cfGLeft)){const gem=cfGLeft&&(!cfLeft||Math.random()<cfGLeft/(cfLeft+cfGLeft));if(gem)cfGLeft--;else cfLeft--;cfOne(gem);if(++cfN%5===0){AU.sfx('star');hap('tick')}}}
  const fl=cfY0+.05;for(let i=fnCoins.length-1;i>=0;i--){const c=fnCoins[i],m=c.m;c.t+=dt;c.vy-=24*dt;m.position.x+=c.vx*dt;m.position.y+=c.vy*dt;m.position.z+=c.vz*dt;m.rotation.x+=c.sx*dt;m.rotation.z+=c.sz*dt;
   if(m.position.y<fl&&c.vy<0){m.position.y=fl;c.vy=-c.vy*.36;c.vx*=.55;c.vz*=.55;c.sx*=.5;c.sz*=.5}
   const f=c.L-c.t;if(f<.35)m.scale.setScalar(Math.max(.01,f/.35));if(f<=0){S.remove(m);fnCoins.splice(i,1)}}}
-function cfClear(){for(const c of fnCoins)S.remove(c.m);fnCoins.length=0;cfLeft=cfGLeft=0}
-function end(){gameResume(1);tutHide('run');st='over';AU.sfx('over');const nb=save.best>=60&&dist>save.best,nbv=(save.bv|0)>0&&maxV>(save.bv|0),bw=!!window.__blown;window.__blown=0;const base=liveCoin(),mc=Math.min(cost('sl'),cost('ld'),cost('inc')),earn=Math.max(base,3,Math.min(mc-save.coins,Math.ceil(mc*COIN_RATE)));save.coins+=earn;save.best=Math.max(save.best,dist);const fs=Math.floor(score),fh=Math.floor(maxH),nbs=fs>(save.bs|0)&&(save.bs|0)>=300,nbh=fh>(save.bh|0)&&(save.bh|0)>=10;save.bs=Math.max(save.bs|0,fs);save.bh=Math.max(save.bh|0,fh);save.bv=Math.max(save.bv|0,Math.floor(maxV));hourRoll();save.hr.d=Math.max(save.hr.d,Math.floor(dist));save.hr.s=Math.max(save.hr.s,fs);save.hr.h=Math.max(save.hr.h,fh);monthRoll();save.mo.d=Math.max(save.mo.d,Math.floor(dist));save.mo.s=Math.max(save.mo.s,fs);save.mo.h=Math.max(save.mo.h,fh);save.runs++;save.tot+=dist;qCheck();qAdd('run',1);qAdd('tot',dist);qAdd('far',dist,1);qAdd('coin',earn);qAdd('high',fh);qAdd('fast',Math.floor(maxV));qAdd('score',fs);qAdd('air',Math.floor(airRun));if(!runHits)qAdd('clean',Math.floor(dist));const qd=qNew,ad=achRun;qNew=0;persist();lbPost();if(nb)setTimeout(()=>confetti(180,'both'),350);else if(nbs||nbh)setTimeout(()=>confetti(100,'both'),350);resToast=`${nb?'🏆 NEW BEST! ':''}${Math.floor(dist)} m · +${earn} 🪙`+(xpRun?` · +${Math.round(xpRun)} ⭐`:'')+(dmRun?` · +${dmRun} 💎`:'')+(qd?` · 📜 ${qd} quest${qd>1?'s':''} done!`:'')+`<br>⭐ ${fs.toLocaleString()} pts${nbs?' 🏆':''} · 🚀 ${fh} m${nbh?' 🏆':''}`;const sd={nb,nbs,nbh,nbv,earn,fs,fh,qd,ad,bw,dist:Math.floor(dist),mv:Math.floor(maxV),xp:Math.round(xpRun),dm:dmRun,pu:got.length,area:chAt(dist).n,cl:!!(sky||skVis)};resToast='';
+function cfClear(){for(const c of fnCoins)S.remove(c.m);fnCoins.length=0;cfLeft=cfGLeft=0;cfWave2=0}
+function end(){const pb0=save.best;gameResume(1);tutHide('run');st='over';AU.sfx('over');const nb=save.best>=60&&dist>save.best,nbv=(save.bv|0)>0&&maxV>(save.bv|0),bw=!!window.__blown;window.__blown=0;const base=liveCoin(),mc=Math.min(cost('sl'),cost('ld'),cost('inc')),earn=Math.max(base,3,Math.min(mc-save.coins,Math.ceil(mc*COIN_RATE)));save.coins+=earn;save.best=Math.max(save.best,dist);const fs=Math.floor(score),fh=Math.floor(maxH),nbs=fs>(save.bs|0)&&(save.bs|0)>=300,nbh=fh>(save.bh|0)&&(save.bh|0)>=10;save.bs=Math.max(save.bs|0,fs);save.bh=Math.max(save.bh|0,fh);save.bv=Math.max(save.bv|0,Math.floor(maxV));hourRoll();save.hr.d=Math.max(save.hr.d,Math.floor(dist));save.hr.s=Math.max(save.hr.s,fs);save.hr.h=Math.max(save.hr.h,fh);monthRoll();save.mo.d=Math.max(save.mo.d,Math.floor(dist));save.mo.s=Math.max(save.mo.s,fs);save.mo.h=Math.max(save.mo.h,fh);save.runs++;save.tot+=dist;qCheck();qAdd('run',1);qAdd('tot',dist);qAdd('far',dist,1);qAdd('coin',earn);qAdd('high',fh);qAdd('fast',Math.floor(maxV));qAdd('score',fs);qAdd('air',Math.floor(airRun));if(!runHits)qAdd('clean',Math.floor(dist));const qd=qNew,ad=achRun;qNew=0;persist();lbPost();if(nb)setTimeout(()=>confetti(180,'both'),350);else if(nbs||nbh)setTimeout(()=>confetti(100,'both'),350);resToast=`${nb?'🏆 NEW BEST! ':''}${Math.floor(dist)} m · +${earn} 🪙`+(xpRun?` · +${Math.round(xpRun)} ⭐`:'')+(dmRun?` · +${dmRun} 💎`:'')+(qd?` · 📜 ${qd} quest${qd>1?'s':''} done!`:'')+`<br>⭐ ${fs.toLocaleString()} pts${nbs?' 🏆':''} · 🚀 ${fh} m${nbh?' 🏆':''}`;const sd={nb,nbs,nbh,nbv,earn,fs,fh,qd,ad,bw,dist:Math.floor(dist),mv:Math.floor(maxV),xp:Math.round(xpRun),dm:dmRun,pu:got.length,area:chAt(dist).n,cl:!!(sky||skVis)};resToast='';
  /* the coins (and diamonds) you earned burst out of your ride; the summary follows (tap to skip) */
  endFin=()=>{endFin=null;clearTimeout(endTm);cfClear();enterMenu('');runSummary(sd)};hap('buzz');
  if(window.__instantEnd||document.hidden){endFin();return}
- cfStart(earn,dmRun);endTm=setTimeout(()=>{if(endFin)endFin()},CF_SECS*1000)}
+ const succ=nb?1.4:Math.max(.15,Math.min(1,dist/Math.max(pb0,300)));cfStart(earn,dmRun,succ);endTm=setTimeout(()=>{if(endFin)endFin()},(nb?CF_SECS+.8:CF_SECS)*1000)}
 let endFin=null,endTm=0;addEventListener('pointerdown',e=>{if(endFin&&st==='over'&&performance.now()-cfT0>350){e.stopPropagation();e.preventDefault();endFin()}},true);
 function runSummary(o){let el=$('rsum');if(el)el.remove();el=document.createElement('div');el.id='rsum';
  const L=(a,n,b,hl)=>`<div class=rsr${hl?' hl':''}><span>${a} ${n}</span><b>${b}${hl?' 🏆':''}</b></div>`,rec=[];
@@ -1792,7 +1801,7 @@ function step1(dt){if(++pruneT>=20){pruneT=0;pruneFeats()}if(rkT>0&&gr){const sl
   if(sky&&!onDeck(d,px)){gr=false;vx=vh;vy=v*sn;airT=0;y=ny+.02;roF=1;roD=d;roV=vy}else if(v>6&&kk<-30/(vh*vh)-.02){gr=false;vx=vh;vy=v*sn;airT=0;y=ny+.02}else y=ny;
  }else{airT+=dt;airRun+=dt;if(jWt>0)jWt=Math.max(0,jWt-dt);vy-=(hold&&rkT<=0&&sk('dv')>=1?55*(1+.03*eL('dv')):(rkT>0?.08:1)*(jWt>0?JMP.heavy:1)*26.5*Math.max(.62,Math.pow(.88,pw.wings|0)*Math.pow(.97,eL('b2'))*M.fl)*skGm*(1+Math.min(.5,Math.max(0,vx-52)*.008))*(sky?1.2:1))*dt;if(rkT>0)rkStep(dt);if(skFall&&vy<-42)vy=-42;if(skFall)roF=0;const yP=y;if(roF){if(vy>roV+3||rkT>0||jcd>.1)roF=0;else if(d-roD>roCap())vx*=Math.exp(-14*dt)}d+=vx*dt;y+=vy*dt;{const ex=vx-vcap();if(ex>0)vx-=(ex*1.2+ex*ex*.04)*dt}const gy=sky?((onDeck(d,px)&&yP>=skH(d)-SK_F)?skH(d):-1e9):Hf(d);
   if(y<=gy){const s=slope(d),n=Math.hypot(1,s),tx=1/n,ty=s/n;let vt=vx*tx+vy*ty;const imp=Math.abs(-vx*ty+vy*tx);
-   y=gy;skFall=0;jWt=0;sq=Math.min(1,imp/10);if(imp>4&&airT>.25){AU.sfx('land',imp);hap(imp>13?'heavy':imp>8?'medium':'light')}if(imp>13)shake=.4;
+   y=gy;skFall=0;jWt=0;sq=Math.min(1,imp/10);if(imp>4&&airT>.25){AU.sfx('land',imp);if(imp>22)hap('medium');else if(imp>13)hap('light')}/* only real thuds, softer than before */if(imp>13)shake=.4;
    const nb=imp*(hold&&sk('dv')>=1?.3:.48);jl=jmpN();
    if(imp>30&&-vx*ty+vy*tx<0){const vx0=vx;vx=Math.max(vt*tx-nb*ty,vx0);vy=vt*ty+nb*tx;y=gy+.03;airT=0;shake=Math.max(shake,Math.min(.5,imp/90));bnN++}
    else{if(imp<=13&&airT>.45){vt+=2.5;if(!sky)qAdd('land',1)}v=Math.max(vt,vx*n);gr=true;bnN=0}}}
@@ -1819,8 +1828,11 @@ function loopB(){const dt0=Math.min(clock.getDelta(),.033),pz=(tutPz||gPause)&&s
  if(st==='run'&&!pz)step(dt);
  if(st==='run'&&!pz&&dist>=nextPick)pickStart();
  if(st==='dying')dyStep(dt);
- if(st==='idle'&&pull>0.02){const n=Math.floor(pull*8);if(n>pullN){pullN=n;hap(pull>=.98?'medium':'tick');pullHold=0}if(pull>=.98){pullHold+=dt;if(pullHold>=.34){pullHold=0;hap('light')}}}else{pullN=0;pullHold=0}
+ {const now=performance.now();/* real time, so slow phones pulse just as often */
+  if(st==='idle'&&pull>0.02){const n=Math.floor(pull*8);if(n>pullN){pullN=n;hap(pull>=.98?'medium':'tick');pullHold=now}if(pull>=.98&&now-pullHold>=340){pullHold=now;hap('light')}}else{pullN=0;pullHold=0}
+  if(st==='run'&&rkT>0&&!pz){if(now-rkHap>=90){rkHap=now;hap('light')}}}
  cfStep(dt);
+ /* (rocket: a steady buzz for as long as it burns, above) */
  if(st==='count'){cd-=dt;const n=Math.ceil(cd);if(n!==lastN&&n>0){lastN=n;AU.sfx('beep');hap('tick');const c=$('cd');c.textContent=n;c.style.animation='none';c.offsetWidth;c.style.animation='pop .5s ease-out'}if(cd<=0){st='run';AU.sfx('go');hap('medium');if(rkPend){rkPend=0;rkFire()}inv=2;if(!gr){jl=jmpN();jcd=0}$('cd').style.display='none'}}
  const pf=Pf(d-pull*4),th=pf.t,wx=pf.x+Math.cos(th)*px,wz=pf.z+Math.sin(th)*px;rider.position.set(wx,y+(st==='menu'?.05*Math.sin(clock.elapsedTime*2.4):0),wz);
  const air=st==='run'&&!gr,tp=air?Math.atan2(vy,vx):Math.atan(slope(d))+pull*.35;pitch+=(tp-pitch)*Math.min(1,dt*(air?3.2:10));rider.rotation.x=pitch;
