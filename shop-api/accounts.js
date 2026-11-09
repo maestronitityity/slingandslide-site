@@ -46,6 +46,86 @@ export async function verifyGoogle(token, env) {
   return claims.sub;
 }
 
+// ---- Game Center identity check (iPhone app) -------------------------------------
+// The app asks Game Center for an identity signature (GKLocalPlayer
+// fetchItemsForIdentityVerificationSignature). Apple signs
+//   teamPlayerID + bundle ID + timestamp (UInt64, big-endian) + salt
+// with a key whose certificate is published on an apple.com address. We fetch that
+// certificate over HTTPS from Apple, check the signature and that it is recent.
+export const BUNDLE_ID = 'com.slingandslide.game';
+const certCache = new Map();
+
+// Minimal DER reader: enough to find the public key in an X.509 certificate.
+function der(buf, pos) {
+  const tag = buf[pos]; let len = buf[pos + 1], hdr = 2;
+  if (len & 0x80) { const n = len & 0x7f; if (n < 1 || n > 4) throw new Error('der'); len = 0; for (let i = 0; i < n; i++) len = len * 256 + buf[pos + 2 + i]; hdr = 2 + n; }
+  if (pos + hdr + len > buf.length) throw new Error('der');
+  return { tag, start: pos, body: pos + hdr, end: pos + hdr + len };
+}
+function children(buf, el) { const out = []; for (let p = el.body; p < el.end; ) { const c = der(buf, p); out.push(c); p = c.end; } return out; }
+const oidHex = (buf, el) => hex(buf.slice(el.body, el.end));
+const OID_RSA = '2a864886f70d010101', OID_EC = '2a8648ce3d0201', OID_P256 = '2a8648ce3d030107', OID_P384 = '2b81040022';
+
+export function spkiFromCert(buf) {
+  const cert = der(buf, 0); const tbs = children(buf, cert)[0]; const f = children(buf, tbs);
+  let i = f[0].tag === 0xa0 ? 1 : 0; // optional version
+  const spki = f[i + 5]; // serial, signature alg, issuer, validity, subject, then the public key
+  if (!spki || spki.tag !== 0x30) throw new Error('spki');
+  const alg = children(buf, children(buf, spki)[0]);
+  const kind = oidHex(buf, alg[0]);
+  let algo;
+  if (kind === OID_RSA) algo = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+  else if (kind === OID_EC) { const c = oidHex(buf, alg[1]); algo = { name: 'ECDSA', namedCurve: c === OID_P256 ? 'P-256' : c === OID_P384 ? 'P-384' : '' }; if (!algo.namedCurve) throw new Error('curve'); }
+  else throw new Error('key type');
+  return { spki: buf.slice(spki.start, spki.end), algo };
+}
+// ECDSA signatures arrive DER-encoded; WebCrypto wants r||s.
+function ecRaw(sig, size) {
+  const seq = der(sig, 0), [r, s] = children(sig, seq);
+  const fix = (el) => { let b = sig.slice(el.body, el.end); while (b.length > size && b[0] === 0) b = b.slice(1); const o = new Uint8Array(size); o.set(b, size - b.length); return o; };
+  const out = new Uint8Array(size * 2); out.set(fix(r), 0); out.set(fix(s), size); return out;
+}
+const b64d = (s) => Uint8Array.from(atob(String(s || '')), (c) => c.charCodeAt(0));
+
+export async function verifyGameCenter(b, env) {
+  b = b && typeof b === 'object' ? b : {};
+  const pid = String(b.playerId || '');
+  if (!/^[A-Za-z0-9:._\-]{3,120}$/.test(pid)) return null;
+  if (b.bundleId !== BUNDLE_ID) return null;
+  let url; try { url = new URL(String(b.publicKeyUrl || '')); } catch (_) { return null; }
+  const testOk = env.GC_TEST_KEY_ORIGIN && url.origin === env.GC_TEST_KEY_ORIGIN;
+  if (!testOk && (url.protocol !== 'https:' || !/(^|\.)apple\.com$/i.test(url.hostname))) return null;
+  const ts = Number(b.timestamp);
+  if (!Number.isSafeInteger(ts) || Math.abs(Date.now() - ts) > 20 * 60e3) return null;
+  let sig, salt; try { sig = b64d(b.signature); salt = b64d(b.salt); } catch (_) { return null; }
+  if (!sig.length || !salt.length || salt.length > 64) return null;
+  let key = certCache.get(url.href);
+  if (!key) {
+    const r = await fetch(url.href);
+    if (!r.ok) return null;
+    const { spki, algo } = spkiFromCert(new Uint8Array(await r.arrayBuffer()));
+    key = { algo, k: await crypto.subtle.importKey('spki', spki, algo, false, ['verify']) };
+    if (certCache.size > 20) certCache.clear();
+    certCache.set(url.href, key);
+  }
+  const p = enc.encode(pid), bid = enc.encode(BUNDLE_ID), msg = new Uint8Array(p.length + bid.length + 8 + salt.length);
+  msg.set(p, 0); msg.set(bid, p.length);
+  new DataView(msg.buffer).setBigUint64(p.length + bid.length, BigInt(ts), false);
+  msg.set(salt, p.length + bid.length + 8);
+  let good = false;
+  try {
+    if (key.algo.name === 'ECDSA') good = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key.k, ecRaw(sig, key.algo.namedCurve === 'P-256' ? 32 : 48), msg);
+    else good = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key.k, sig, msg);
+  } catch (_) { good = false; }
+  return good ? 'gc:' + pid : null;
+}
+
+// Game Center names are chosen and checked by Apple; we only tidy them up.
+export function gcName(raw) {
+  const n = String(raw || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069<>]/g, '').replace(/\s+/g, ' ').trim();
+  return [...n].slice(0, 20).join('') || 'Player';
+}
+
 // ---- Nicknames ----------------------------------------------------------------
 // Rude-word check on a normalised copy (lowercase, common look-alike characters
 // mapped, everything except letters removed).
@@ -121,8 +201,11 @@ export class Hub {
     const { op, sub, tok, body } = await req.json();
     const R = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
     if (op === 'lb_get') return R({ docs: this.lbDocs() });
-    if (op === 'login') {
+    if (op === 'login' || op === 'login_gc') {
       if (!this.one('SELECT sub FROM users WHERE sub = ?', sub)) this.sql.exec('INSERT INTO users (sub, pid, nick, nick_l, created) VALUES (?, ?, NULL, NULL, ?)', sub, 'p' + hex(crypto.getRandomValues(new Uint8Array(10))), Date.now());
+      // Game Center players appear under their Game Center name (kept up to date; not
+      // part of the website's unique-nickname list)
+      if (op === 'login_gc') this.sql.exec('UPDATE users SET nick = ?, nick_l = NULL WHERE sub = ?', gcName(body && body.name), sub);
       this.sql.exec('DELETE FROM sessions WHERE sub = ? AND exp < ?', sub, Date.now());
       const raw = hex(crypto.getRandomValues(new Uint8Array(32)));
       this.sql.exec('INSERT INTO sessions (th, sub, exp) VALUES (?, ?, ?)', await sha256(raw), sub, Date.now() + SESSION_DAYS * 864e5);

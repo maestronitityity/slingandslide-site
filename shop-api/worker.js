@@ -11,7 +11,7 @@
 // Claiming again with the same device returns the same reward, and the game
 // ignores sessions it has already credited, so retries are safe.
 
-import { Hub, verifyGoogle } from './accounts.js';
+import { Hub, verifyGoogle, verifyGameCenter } from './accounts.js';
 export { Hub };
 
 export const ITEMS = {
@@ -28,6 +28,8 @@ const ALLOWED_ORIGINS = [
   'https://slingandslide.com',
   'https://www.slingandslide.com',
   'https://maestronitityity.github.io',
+  'capacitor://localhost', // iPhone/iPad app
+  'https://localhost', // Android app
 ];
 const SITE = 'https://slingandslide.com/play/';
 const COUNTRIES = ['AU'];
@@ -197,6 +199,13 @@ async function account(req, env, h, path) {
     const r = await hubCall(env, 'login', { sub });
     return r.body && r.body.token ? back('ss_tok=' + r.body.token) : back('ss_signin=fail');
   }
+  if (m === 'POST' && path === '/auth/gamecenter') {
+    const b = await req.json().catch(() => ({}));
+    const sub = await verifyGameCenter(b, env).catch(() => null);
+    if (!sub) return json({ error: 'bad_token' }, 401, h);
+    const r = await hubCall(env, 'login_gc', { sub, body: { name: b.name } });
+    return json(r.body, r.status, h);
+  }
   const tok = bearer(req);
   if (!tok) return json({ error: 'signed_out' }, 401, h);
   const body = m === 'GET' ? null : await req.json().catch(() => ({}));
@@ -206,7 +215,7 @@ async function account(req, env, h, path) {
   const r = await hubCall(env, op, { tok, body });
   return json(r.body, r.status, h);
 }
-const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
+const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/auth/gamecenter', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
 
 export default {
   async fetch(req, env) {

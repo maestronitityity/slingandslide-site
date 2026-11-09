@@ -18,7 +18,9 @@
   const STARTER_ID = PRE + 'starter';
   const ALL_IDS = [...PACK_IDS, STARTER_ID];
   const LB_ALL_TIME = 'best_distance';
-  const LB_WEEKLY = 'weekly_distance';
+  // every run posts its distance and its score to all-time, weekly, daily and hourly boards
+  const LB_DISTANCE = ['best_distance', 'weekly_distance', 'daily_distance', 'hourly_distance'];
+  const LB_SCORE = ['best_score', 'weekly_score', 'daily_score', 'hourly_score'];
 
   // ---- Helpers -------------------------------------------------------------
   const say = (msg) => {
@@ -81,6 +83,32 @@
   C.registerPlugin('App').getInfo()
     .then((i) => { window.APP_VER = i.version + ' (' + i.build + ')'; try { if (setOpen) renderSet(); } catch (_) {} })
     .catch(() => {});
+
+  // ---- Android back button -------------------------------------------------
+  // Registering a listener stops Capacitor's default (which closes the app).
+  // Back closes whatever is on top, pauses a run, and only leaves the app from
+  // the main garage screen, where it minimises like a normal Android game.
+  if (platform === 'android') {
+    const AppP = C.registerPlugin('App');
+    const $ = (id) => document.getElementById(id);
+    window.onBack = () => {
+      try {
+        const rs = $('rsum');
+        if (rs) { if (!rs.classList.contains('out')) { rs.classList.add('out'); setTimeout(() => rs.remove(), 300); } return; }
+        if ($('gm')) { gmClose(); return; }
+        if ($('lbm')) { lbHide(); return; }
+        if (setOpen) { toggleSet(); return; }
+        if (st === 'run') { if (gPause) gameResume(); else gamePause(); return; }
+        if (st === 'idle') { enterMenu(''); return; }
+        if (st === 'menu') {
+          if (tab !== 'garage') { setTab('garage'); return; }
+          AppP.minimizeApp().catch(() => AppP.exitApp());
+        }
+        // countdown, power-up pick and crash animation: ignore back
+      } catch (_) {}
+    };
+    AppP.addListener('backButton', () => window.onBack()).catch(() => {});
+  }
 
   // ---- In-app purchases ----------------------------------------------------
   const IAP = (window.IAP = { native: true, ready: false, busy: false, starterPrice: null });
@@ -168,30 +196,28 @@
       GCP.submitScore({ leaderboardIds: ids, score: Math.floor(score) }).catch(() => {});
     };
 
-    GCP.addListener('authChanged', (r) => { GC.ok = !!(r && r.authenticated); }).catch(() => {});
+    window.GCP = GCP; // used by rankings.js
+    const authed = (r) => { const was = GC.ok; GC.ok = !!(r && r.authenticated); if (GC.ok && !was) dispatchEvent(new Event('gc-auth')); };
+    GCP.addListener('authChanged', authed).catch(() => {});
     GCP.authenticate()
       .then((r) => {
-        GC.ok = !!(r && r.authenticated);
-        // Carry over a best distance set before Game Center was signed in.
-        if (GC.ok) submit(save.best, [LB_ALL_TIME]);
+        authed(r);
+        // Carry over the best distance and best score set before Game Center was signed in.
+        if (GC.ok) { submit(save.best, [LB_ALL_TIME]); submit(save.bs, ['best_score']); }
       })
       .catch(() => {});
 
     // Post every finished run; Game Center keeps each player's best.
     const origEnd = window.end;
     window.end = function () {
-      let runDist = 0;
-      try { runDist = dist; } catch (_) {} // read first: end() resets dist for the next run
+      let runDist = 0, runScore = 0;
+      try { runDist = dist; runScore = score; } catch (_) {} // read first: end() resets dist for the next run
       const r = origEnd.apply(this, arguments);
-      submit(runDist, [LB_ALL_TIME, LB_WEEKLY]);
+      submit(runDist, LB_DISTANCE);
+      submit(runScore, LB_SCORE);
       return r;
     };
-
-    // The 🏆 button opens the Game Center leaderboards when signed in.
-    const origLb = window.lbShow;
-    window.lbShow = function () {
-      if (!GC.ok) return origLb.apply(this, arguments);
-      GCP.showLeaderboard({ leaderboardId: LB_ALL_TIME }).catch(() => origLb());
-    };
+    // The 🏆 button opens the game's Global Rankings (rankings.js), which has a
+    // Game Center button for Apple's leaderboards.
   }
 })();
