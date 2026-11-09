@@ -164,6 +164,11 @@ canvas{display:block}
 #menu button,#menu .card,#menu .gi,#pick .pc{transition:transform .09s ease,filter .09s ease}
 #menu button:active:not(.off){transform:translateY(2px) scale(.92);filter:brightness(.92)}
 #pick .pc:active{transform:translateY(2px) scale(.95)}
+#pick .pc.pk-on{position:relative;z-index:2;animation:pkon .5s cubic-bezier(.2,1.5,.35,1) both;box-shadow:0 0 0 3px #ffd23d,0 0 26px rgba(255,210,61,.85),0 4px 0 #3a5673}
+@keyframes pkon{0%{scale:.9}30%{scale:1.12}55%{scale:.97}75%{scale:1.03}100%{scale:1.02}}
+#pick .pc.pk-off{transition:opacity .28s,scale .28s,filter .28s;opacity:.25;scale:.92;filter:grayscale(.7)}
+#pick.chosen h2,#pick.chosen .sub{transition:opacity .3s;opacity:.4}
+.pkfly{position:fixed;z-index:9;font-size:44px;line-height:1;translate:-50% -50%;pointer-events:none;transition:left .5s cubic-bezier(.5,0,.3,1),top .5s cubic-bezier(.5,-.4,.3,1),scale .5s;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35))}
 #menu .pl,#menu .gb,#menu .card button,#menu .sc u{position:relative;overflow:hidden}
 #menu .sb{background-color:#9fd0ee}
 #menu .pl,#menu .gb,#menu .card button,#menu .sb,#menu .tb,#menu .nd,#menu .sc,#menu .sc u,#menu .card,#menu .gi,#pick .pc{background-image:linear-gradient(180deg,rgba(255,255,255,.36) 0%,rgba(255,255,255,.10) 46%,rgba(0,0,0,.10) 54%,rgba(0,0,0,0) 100%)!important}
@@ -464,7 +469,12 @@ const AU=(()=>{let C=null,M=null,SG=null,MG=null,NB=null,ok=false,mode='menu',st
  const UIS={setTab:'tab',play:'start',skPick:'node',skBuy:'$skill',buy:'$upg',buyXp:'$upg',buyCoins:'$coins',buyStarter:'$coins',testBuy:'$coins',equip:'equip',gcShow:'open',achShow:'open',lbShow:'open',qShow:'open',gcHide:'close',lbHide:'close',gmClose:'close',skNo:'close',setT:'toggle',claimDaily:'claim',qClaim:'claim',achClaim:'claim',lbClaim:'claim',qBonus:'claim',roll:'roll',gmAgain:'roll',gmSkipNow:'skip',skReset:'reset',skYes:'reset',choose:'',toggleSet:'%',setTrk:''};
  addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('[onclick],button,.gc,.qc,.chip,.pc');if(!b||b.id==='jb'||b.id==='rb')return;const at=b.getAttribute('onclick')||'',fn=(at.match(/^\s*([A-Za-z_$][\w$]*)\s*\(/)||[])[1],k=fn in UIS?UIS[fn]:'click';if(k==='')return;
   const c0=save.coins,g0=save.gems,s0=save.sp,o0=typeof setOpen!=='undefined'?setOpen:0;setTimeout(()=>{let kk=k;if(kk[0]==='$')kk=(save.coins<c0||save.gems<g0||save.sp<s0)?kk.slice(1):'deny';else if(kk==='%')kk=setOpen&&!o0?'open':'close';sfx(kk)},0)},{capture:true,passive:true});
- return{sfx,vol,setMode,track,TR,OST}})();AU.track(SET.trk===-1?-1:SET.trk|0);
+ /* At the 6,000 m power-up the ground music fades out and the clouds song fades in, to match the snowy fields; the
+    3-song playlist carries on from there. */
+ function glass(){const A=OST.A;if(!A||decodeURIComponent(A.src).endsWith(OST_GLASS.slice(6)))return;OST.ai=OST.list.length;const was=!A.paused;
+  const go=()=>{A.src=OST_GLASS;try{A.currentTime=0}catch(e){}if(was||OST.cur==='A')A.play().catch(()=>{});if(OST.ready&&OST.cur==='A'){const t=C.currentTime;OST.gA.gain.cancelScheduledValues(t);OST.gA.gain.setValueAtTime(0,t);OST.gA.gain.setTargetAtTime(1,t,.6)}};
+  if(OST.ready&&OST.cur==='A'&&was){const t=C.currentTime;OST.gA.gain.cancelScheduledValues(t);OST.gA.gain.setTargetAtTime(0,t,.35);setTimeout(go,1300)}else go()}
+ return{sfx,vol,setMode,track,TR,OST,glass}})();AU.track(SET.trk===-1?-1:SET.trk|0);
 
 save.bs=save.bs|0;save.bh=save.bh|0;
 function mKey(){return new Date().toISOString().slice(0,7)}
@@ -1114,13 +1124,22 @@ const MILE=2000,POOL=[['rocket','🚀','Rocket Start','Instant burst of speed'],
 ['wind','💨','Tailwind','Hills slow you down less'],['pad','⚡','Super Boosts','Boost pads 10% stronger'],['steer','🎯','Nimble Chick','Steer faster']];
 let pw={},got=[],shield=0,nextPick=MILE,inv=0,cd=0,lastN=0;
 let pickAt=0;
-function pickStart(){pickAt=performance.now()+500;AU.sfx('pick');st='pick';hold=false;steer=0;confetti(150,'both');setTimeout(()=>confetti(70,'rain'),350);const m=nextPick;nextPick+=MILE;
+let glassRun=0;
+function pickStart(){pickAt=performance.now()+500;AU.sfx('pick');st='pick';hold=false;steer=0;confetti(150,'both');setTimeout(()=>confetti(70,'rain'),350);const m=nextPick;nextPick+=MILE;if(m>=6000&&!glassRun){glassRun=1;AU.glass()}
  const ch=POOL.slice().sort(()=>Math.random()-.5).slice(0,3+sk('c3')),el=$('pick');el.style.display='flex';
  el.innerHTML=`<h2>🎉 ${m} m! 🎉</h2><div class=sub>Choose a power-up</div>`+ch.map(p=>`<button class=pc onclick="choose('${p[0]}')"><div class=e>${p[1]}</div><div><b>${p[2]}</b><span>${p[3]}</span></div></button>`).join('');el.classList.add('wait');setTimeout(()=>el.classList.remove('wait'),500)}
 function pwRender(){const e=$('pw'),rows=Math.max(3,Math.floor((innerHeight-404)/30)),sl=[];got.forEach((g,i)=>{sl[i%rows]=g});e.innerHTML=sl.map(x=>'<i>'+x+'</i>').join('')}
-function choose(id){if(performance.now()<pickAt)return;AU.sfx('select');qAdd('pick',1);const p=POOL.find(x=>x[0]===id);got.push(p[1]);pwRender();
+/* Choosing a power-up: the card springs and glows, the others drop away, sparkles burst, and the icon flies up to the
+   power-up list before the countdown starts. */
+function choose(id){if(performance.now()<pickAt||st!=='pick')return;pickAt=Infinity;AU.sfx('select');qAdd('pick',1);const p=POOL.find(x=>x[0]===id);got.push(p[1]);
  if(id==='shield')shield+=2;else pw[id]=(pw[id]|0)+1;if(id==='rocket')rkPend=1;
- $('pick').style.display='none';st='count';cd=3;lastN=0;$('cd').style.display='flex'}
+ const el=$('pick'),cards=[...el.querySelectorAll('.pc')],me=cards.find(b=>(b.getAttribute('onclick')||'').includes("'"+id+"'"));
+ cards.forEach(b=>b.classList.add(b===me?'pk-on':'pk-off'));el.classList.add('chosen');
+ try{if(navigator.vibrate)navigator.vibrate([18,40,28])}catch(e){}
+ if(me){burst(me,22,1);setTimeout(()=>{if(me.isConnected)burst(me,12)},140);const ic=me.querySelector('.e'),a=ic.getBoundingClientRect(),f=document.createElement('div');f.className='pkfly';f.textContent=p[1];f.style.left=(a.left+a.width/2)+'px';f.style.top=(a.top+a.height/2)+'px';document.body.appendChild(f);
+  const pwE=$('pw'),r=pwE.getBoundingClientRect(),tx=r.left+16,rows=Math.max(3,Math.floor((innerHeight-404)/30)),ty=r.top+16+30*((got.length-1)%rows);/* same slot as pwRender */
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{f.style.left=tx+'px';f.style.top=ty+'px';f.style.scale='.55'}));setTimeout(()=>{f.remove();pwRender()},560)}else pwRender();
+ setTimeout(()=>{el.style.display='none';el.classList.remove('chosen');st='count';cd=3;lastN=0;$('cd').style.display='flex'},520)}
 // ---- shop (test mode: no real payments) ----
 const PACKS=[[80,'$0.99','💎'],[500,'$4.99','💎💎'],[1200,'$9.99','💎💎💎'],[3000,'$19.99','💰'],[6500,'$49.99','💰💰'],[14000,'$99.99','💰💰💰']],COINP=[[10,500],[50,3000],[200,14000]];
 let smsg='';
@@ -1515,7 +1534,7 @@ function buy(k){const c=cost(k);if(save.coins<c){fxBad=1;showMenu(lastMsg);retur
  setTimeout(()=>{const bu=u.querySelector('u');if(bu)bu.style.width=pct(a)+'%'},30);
  clearTimeout(upT);upT=setTimeout(()=>u.style.display='none',2600)}
 function enterMenu(msg){abQ.length=0;abT=0;if($('ab'))$('ab').style.display='none';tab='garage';xpT=0;lvUp=0;$('xpb').style.display='none';$('lvup').style.display='none';newWorld();d=2;px=0;aim=0;lv=0;pull=0;y=Hf(2);v=vx=vy=0;gr=true;dist=0;steer=0;hold=false;dust.forEach(p=>p.l=0);$('pw').textContent='';$('up').style.display='none';st='menu';showMenu(msg)}
-function play(){runHits=0;airRun=0;achRun=0;clearBirds();nextBird=BIRD_D;rkUsed=0;rkPend=0;skReN=0;rkT=0;rkDetach();setOpen=0;skFalls=0;skVis=0;skRoadR=-1;skCont=0;skHint=0;clearFb();renderSet();boostT=0;sv=0;score=0;lastD=0;maxH=0;maxV=0;hrec=0;scD=0;coinD=0;ringRun=0;clearRings();document.body.classList.remove('inmenu');dust.forEach(p=>p.l=0);dist=0;pbHit=0;dmRun=0;xpRun=0;xpT=0;$('up').style.display='none';pw={};got=[];shield=M.sh+sk('sh');nextPick=MILE;inv=0;cd=0;$('pw').textContent='';d=2;px=0;aim=0;lv=0;y=Hf(2);vx=vy=v=0;gr=true;airT=0;slow=0;pull=0;st='idle';$('menu').style.display='none';$('hint').style.display='block';ly=y+1.4}
+function play(){glassRun=0;runHits=0;airRun=0;achRun=0;clearBirds();nextBird=BIRD_D;rkUsed=0;rkPend=0;skReN=0;rkT=0;rkDetach();setOpen=0;skFalls=0;skVis=0;skRoadR=-1;skCont=0;skHint=0;clearFb();renderSet();boostT=0;sv=0;score=0;lastD=0;maxH=0;maxV=0;hrec=0;scD=0;coinD=0;ringRun=0;clearRings();document.body.classList.remove('inmenu');dust.forEach(p=>p.l=0);dist=0;pbHit=0;dmRun=0;xpRun=0;xpT=0;$('up').style.display='none';pw={};got=[];shield=M.sh+sk('sh');nextPick=MILE;inv=0;cd=0;$('pw').textContent='';d=2;px=0;aim=0;lv=0;y=Hf(2);vx=vy=v=0;gr=true;airT=0;slow=0;pull=0;st='idle';$('menu').style.display='none';$('hint').style.display='block';ly=y+1.4}
 const effD=x=>x<=600?x:600*Math.pow(x/600,.63);
 function end(){gameResume(1);tutHide('run');st='over';AU.sfx('over');const nb=save.best>=60&&dist>save.best,nbv=(save.bv|0)>0&&maxV>(save.bv|0),bw=!!window.__blown;window.__blown=0;const base=liveCoin(),mc=Math.min(cost('sl'),cost('ld'),cost('inc')),earn=Math.max(base,3,Math.min(mc-save.coins,Math.ceil(mc*COIN_RATE)));save.coins+=earn;save.best=Math.max(save.best,dist);const fs=Math.floor(score),fh=Math.floor(maxH),nbs=fs>(save.bs|0)&&(save.bs|0)>=300,nbh=fh>(save.bh|0)&&(save.bh|0)>=10;save.bs=Math.max(save.bs|0,fs);save.bh=Math.max(save.bh|0,fh);save.bv=Math.max(save.bv|0,Math.floor(maxV));hourRoll();save.hr.d=Math.max(save.hr.d,Math.floor(dist));save.hr.s=Math.max(save.hr.s,fs);save.hr.h=Math.max(save.hr.h,fh);monthRoll();save.mo.d=Math.max(save.mo.d,Math.floor(dist));save.mo.s=Math.max(save.mo.s,fs);save.mo.h=Math.max(save.mo.h,fh);save.runs++;save.tot+=dist;qCheck();qAdd('run',1);qAdd('tot',dist);qAdd('far',dist,1);qAdd('coin',earn);qAdd('high',fh);qAdd('fast',Math.floor(maxV));qAdd('score',fs);qAdd('air',Math.floor(airRun));if(!runHits)qAdd('clean',Math.floor(dist));const qd=qNew,ad=achRun;qNew=0;persist();lbPost();if(nb)setTimeout(()=>confetti(180,'both'),350);else if(nbs||nbh)setTimeout(()=>confetti(100,'both'),350);resToast=`${nb?'🏆 NEW BEST! ':''}${Math.floor(dist)} m · +${earn} 🪙`+(xpRun?` · +${Math.round(xpRun)} ⭐`:'')+(dmRun?` · +${dmRun} 💎`:'')+(qd?` · 📜 ${qd} quest${qd>1?'s':''} done!`:'')+`<br>⭐ ${fs.toLocaleString()} pts${nbs?' 🏆':''} · 🚀 ${fh} m${nbh?' 🏆':''}`;const sd={nb,nbs,nbh,nbv,earn,fs,fh,qd,ad,bw,dist:Math.floor(dist),mv:Math.floor(maxV),xp:Math.round(xpRun),dm:dmRun,pu:got.length,area:chAt(dist).n,cl:!!(sky||skVis)};resToast='';enterMenu('');runSummary(sd)}
 function runSummary(o){let el=$('rsum');if(el)el.remove();el=document.createElement('div');el.id='rsum';
@@ -1588,7 +1607,7 @@ function dmUpdate(dt){const t=clock.elapsedTime;for(let i=dms.length-1;i>=0;i--)
   const pf=Pf(g.d),by=g.ay!=null?g.ay:Hf(g.d)+g.hr;g.m.position.set(pf.x+Math.cos(pf.t)*g.lx,by+.2*Math.sin(t*2.6+g.ph)+(g.c?g.c*1.4:0),pf.z+Math.sin(pf.t)*g.lx);g.m.rotation.y=t*2+g.ph;g.m.scale.setScalar(JT[g.t].sz*(1+g.c*1.2)*(1-Math.max(0,g.c-.6)*2));g.m.userData.sp.forEach((q,k)=>{const w=.72+.28*Math.sin(t*(5+k*3)+g.ph*3+k);q.scale.setScalar(q.userData.b*w*(g.c?1+g.c*2:1));q.material.opacity=Math.min(1,(k?.95:.55)*w)*(g.c?Math.max(0,1-g.c):1)})}}
 function spawnRow(d0){const n=3+(Math.random()*4|0),lx=(Math.random()-.5)*10*TWS,zz=(Math.random()-.5)*.8;for(let j=0;j<n;j++){const m=new THREE.Mesh(xpG,xpM);m.scale.setScalar(.55);S.add(m);gems.push({m,d:d0+j*3.2,lx:Math.max(-7*TWS,Math.min(7*TWS,lx+Math.sin(j*.9)*zz*3)),ph:Math.random()*6,c:0})}}
 function nudge(a){if(st!=='run')return;if(gr)v+=a;else vx+=a}
-function addXp(n){n*=(1+.03*eL('c4'))*(1+.01*en('c8'));save.xp+=n;xpRun+=n;xpT=2.6;let up=0;while(save.xp>=need(save.lvl)){save.xp-=need(save.lvl);save.lvl++;save.sp++;save.sp+=2;up++}if(up){lvPts=(lvUp>0?lvPts:0)+3*up;lvUp=1.6;AU.sfx('lvl');persist()}}
+function addXp(n){n*=(1+.03*eL('c4'))*(1+.01*en('c8'));save.xp+=n;xpRun+=n;xpT=2.6;let up=0;while(save.xp>=need(save.lvl)){save.xp-=need(save.lvl);save.lvl++;save.sp++;save.sp+=2;up++}if(up){lvPts=(lvUp>0?lvPts:0)+3*up;lvUp=1.6;AU.sfx('lvl');confetti(120,'both');persist()}}
 function xpStep(){if(d+130>nextXd){spawnRow(nextXd);nextXd+=70+Math.random()*110}
  const rm=(1+.15*eL('c2'))*M.mg;for(const g of gems){if(g.c)continue;if(Math.abs(g.d-d)<1.4*rm&&Math.abs(px-g.lx)<1.5*rm&&Math.abs(y+.8-(Hf(g.d)+1.5))<1.7*rm){g.c=.001;nudge(.5);AU.sfx('star');qAdd('star',1);addScore(SC.star);addXp(3*M.xp);tutShow('star')}}}
 function gemsUpdate(dt){const t=clock.elapsedTime;for(let i=gems.length-1;i>=0;i--){const g=gems[i];
