@@ -92,6 +92,32 @@
     } catch (_) {}
   }
 
+  // ---- Haptics (iOS Taptic Engine / Android vibration) -----------------------
+  // The game calls hap(kind); this maps each kind to the phone's own haptic patterns.
+  {
+    const HP = C.registerPlugin('Haptics');
+    const imp = (style) => HP.impact({ style }).catch(() => {});
+    const note = (type) => HP.notification({ type }).catch(() => {});
+    const seq = (styles, gap) => styles.forEach((st, i) => setTimeout(() => imp(st), i * gap));
+    window.HAPTIC = (k, n) => {
+      switch (k) {
+        case 'tick': case 'light': return imp('LIGHT');
+        case 'medium': return imp('MEDIUM');
+        case 'heavy': return imp('HEAVY');
+        case 'success': return note('SUCCESS');
+        case 'warning': return note('WARNING');
+        case 'error': return note('ERROR');
+        case 'buzz': return seq(['LIGHT', 'LIGHT', 'MEDIUM'], 110);
+        case 'rumble': { // n heavy hits, plus a longer rumble once it gets serious
+          const c = Math.max(1, Math.min(8, n | 0));
+          seq(Array(c).fill('HEAVY'), 120);
+          if (c >= 3) HP.vibrate({ duration: Math.min(700, 120 * c) }).catch(() => {});
+          return;
+        }
+      }
+    };
+  }
+
   // ---- App version (shown at the bottom of Settings) ---------------------
   C.registerPlugin('App').getInfo()
     .then((i) => { window.APP_VER = i.version + ' (' + i.build + ')'; try { if (setOpen) renderSet(); } catch (_) {} })
