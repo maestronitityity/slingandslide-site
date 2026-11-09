@@ -937,7 +937,7 @@ function exitSky(){if(!sky)return;roF=0;vx=Math.max(vx,22);vy=Math.min(vy,-8);sk
  nextXd=d+90;nextDmD=d+260;nextRbD=Math.max(nextRbD,d+900);nextDiD=Math.max(nextDiD,d+2000);lastGemD=d;nextBd=dist+160;nextRgD=0;
  skFlash=.7;shake=.25;AU.sfx('angered');hap('rumble',Math.min(7,1+skFalls));skBanner('<span style="color:#ff2d2d;text-shadow:0 0 16px #ff0000,0 4px 0 rgba(0,0,0,.45)">Angered The Gods!</span>','get back up fast!',2.4)}
 // The Clouds: once unlocked, launch high enough at speed (well above the sky rings) and you simply break through
-const CLOUD_H=112,CLOUD_V=29,cloudsOpen=()=>sk('d2')>=1||achHave('a10')||!!save.ach.cu;
+const CLOUD_H=100,CLOUD_V=29,cloudsOpen=()=>sk('d2')>=1||achHave('a10')||!!save.ach.cu;
 let skHint=0,skReN=0;
 function cloudCheck(){if(sky||gr)return;const hh=y-Ht(d);if(hh>=CLOUD_H&&!cloudsOpen()&&!skHint){skHint=1;skBanner('☁ THE CLOUDS ABOVE','Buy Jump in the skill tree to unlock them',2.6)}
  if(skFall||!cloudsOpen())return;{const ez=(skFalls===1?28:0)-14*skReN;if(hh>=CLOUD_H-ez&&(Math.hypot(vx,vy)>=CLOUD_V*(ez>0?.75:1)||hh>=CLOUD_H-ez+10))enterSky()}}
@@ -1859,7 +1859,22 @@ function loopB(){const dt0=Math.min(clock.getDelta(),.033),pz=(tutPz||gPause)&&s
  if(!R.getContext().isContextLost())try{R.render(S,cam)}catch(_){}}
 addEventListener('resize',()=>{R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.fov=cam.aspect<1?75:60;cam.updateProjectionMatrix()});
 cam.fov=cam.aspect<1?75:60;cam.updateProjectionMatrix();
-dress();cam.position.set(0,3,-6);enterMenu('Sling & Slide');loop();
+/* Shader warm-up. A phone has to compile a shader the first time a new kind of material is drawn, and that froze the
+   game for a moment on release (jewels, rocket sparks), at the first gem, the personal-best flags and the end-of-run coins.
+   Gem and spark materials are thrown away after each run, which freed their shaders, so it happened again every run.
+   Here every material set-up the game uses is built once at start-up, compiled, and kept alive (hidden), so those shaders
+   are ready before you press Play and are never freed. Shaders differ by material type, texture, two-sided, flat shading,
+   vertex colours and sprite scaling (not colour, opacity or blending), so one hidden mesh per combination covers them all. */
+function gfxWarm(){try{const g=new THREE.Group(),geo=new THREE.PlaneGeometry(.01,.01),cg=new THREE.PlaneGeometry(.01,.01),D=THREE.DoubleSide;
+ cg.setAttribute('color',new THREE.BufferAttribute(new Float32Array(cg.attributes.position.count*3).fill(1),3));
+ const L=o=>new THREE.MeshLambertMaterial(o),B=o=>new THREE.MeshBasicMaterial(o);
+ [[L({}),geo],[L({flatShading:true}),geo],[L({flatShading:true,side:D}),geo],[L({vertexColors:true,flatShading:true,side:D}),cg],[L({map:jTex}),geo],
+  [B({}),geo],[B({side:D}),geo],[B({vertexColors:true,side:D}),cg],[B({map:jTex}),geo],[B({map:jTex,side:D}),geo],
+  [new THREE.MeshPhongMaterial({flatShading:true}),geo]].forEach(([m,q])=>g.add(new THREE.Mesh(q,m)));
+ g.add(new THREE.Sprite(new THREE.SpriteMaterial({map:jTex})),new THREE.Sprite(new THREE.SpriteMaterial({map:jTex,sizeAttenuation:false})));
+ g.visible=false;g.name='gfxWarm';S.add(g);R.compile(S,cam);
+ cfAssets();R.initTexture(jTex);R.initTexture(cfMat[1].map)}catch(e){}}
+dress();cam.position.set(0,3,-6);enterMenu('Sling & Slide');gfxWarm();loop();
 lbInit();
 
 // ---- premium icon set: swaps emoji in the UI for the game's own icons ----
