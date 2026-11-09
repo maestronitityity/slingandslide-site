@@ -18,7 +18,7 @@ jobs:
           node-version: 22
       - name: Check
         run: |
-          cat > /tmp/check.mjs <<'JS'
+          cat > ./gc-check.mjs <<'JS'
           import { spkiFromCert } from './shop-api/accounts.js';
           const out = [];
           for (const n of [6, 7, 8, 9, 10, 11, 12]) {
@@ -34,4 +34,4 @@ jobs:
           }
           console.log('::notice title=Game Center certificates::' + out.join('%0A'));
           JS
-          node /tmp/check.mjs
+          node ./gc-check.mjs
