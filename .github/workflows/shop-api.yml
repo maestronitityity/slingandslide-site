@@ -59,6 +59,20 @@ jobs:
         env:
           STRIPE_KEY: ${{ secrets.STRIPE_KEY }}
 
+      # Optional: the Google OAuth client secret that lets Android players join Global Rankings
+      # with Google Play Games (repository secret PLAY_GAMES_CLIENT_SECRET).
+      - name: Play Games sign-in secret
+        if: steps.check.outputs.ready == 'true' && env.PGS_CLIENT_SECRET != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: shop-api
+          secrets: |
+            PGS_CLIENT_SECRET
+        env:
+          PGS_CLIENT_SECRET: ${{ secrets.PLAY_GAMES_CLIENT_SECRET }}
+
       - name: Report address and mode
         if: steps.check.outputs.ready == 'true'
         env:

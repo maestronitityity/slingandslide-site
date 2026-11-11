@@ -11,7 +11,7 @@
 // Claiming again with the same device returns the same reward, and the game
 // ignores sessions it has already credited, so retries are safe.
 
-import { Hub, verifyGoogle, verifyGameCenter } from './accounts.js';
+import { Hub, verifyGoogle, verifyGameCenter, verifyPlayGames } from './accounts.js';
 export { Hub };
 
 export const ITEMS = {
@@ -206,6 +206,13 @@ async function account(req, env, h, path) {
     const r = await hubCall(env, 'login_gc', { sub, body: { name: b.name } });
     return json(r.body, r.status, h);
   }
+  if (m === 'POST' && path === '/auth/playgames') {
+    const b = await req.json().catch(() => ({}));
+    const v = await verifyPlayGames(b, env).catch(() => null);
+    if (!v) return json({ error: env.PGS_CLIENT_SECRET ? 'bad_token' : 'not_set_up' }, 401, h);
+    const r = await hubCall(env, 'login_gc', { sub: v.sub, body: { name: v.name } });
+    return json(r.body, r.status, h);
+  }
   const tok = bearer(req);
   if (!tok) return json({ error: 'signed_out' }, 401, h);
   const body = m === 'GET' ? null : await req.json().catch(() => ({}));
@@ -215,7 +222,7 @@ async function account(req, env, h, path) {
   const r = await hubCall(env, op, { tok, body });
   return json(r.body, r.status, h);
 }
-const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/auth/gamecenter', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
+const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/auth/gamecenter', '/auth/playgames', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
 
 export default {
   async fetch(req, env) {
