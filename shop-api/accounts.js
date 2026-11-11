@@ -87,24 +87,30 @@ function ecRaw(sig, size) {
 }
 const b64d = (s) => Uint8Array.from(atob(String(s || '')), (c) => c.charCodeAt(0));
 
-export async function verifyGameCenter(b, env) {
+// Returns 'gc:<teamPlayerID>' or null. gcCheck says why a proof was turned down, so the app can show it.
+export async function verifyGameCenter(b, env) { return (await gcCheck(b, env)).sub || null; }
+export async function gcCheck(b, env) {
+  const no = (why) => ({ why });
   b = b && typeof b === 'object' ? b : {};
   const pid = String(b.playerId || '');
-  if (!/^[A-Za-z0-9:._\-]{3,120}$/.test(pid)) return null;
-  if (b.bundleId !== BUNDLE_ID) return null;
-  let url; try { url = new URL(String(b.publicKeyUrl || '')); } catch (_) { return null; }
+  if (!/^[A-Za-z0-9:._\-]{3,120}$/.test(pid)) return no('player_id');
+  if (b.bundleId !== BUNDLE_ID) return no('bundle_id');
+  let url; try { url = new URL(String(b.publicKeyUrl || '')); } catch (_) { return no('key_url'); }
   const testOk = env.GC_TEST_KEY_ORIGIN && url.origin === env.GC_TEST_KEY_ORIGIN;
-  if (!testOk && (url.protocol !== 'https:' || !/(^|\.)apple\.com$/i.test(url.hostname))) return null;
+  if (!testOk && (url.protocol !== 'https:' || !/(^|\.)apple\.com$/i.test(url.hostname))) return no('key_url');
   const ts = Number(b.timestamp);
-  if (!Number.isSafeInteger(ts) || Math.abs(Date.now() - ts) > 20 * 60e3) return null;
-  let sig, salt; try { sig = b64d(b.signature); salt = b64d(b.salt); } catch (_) { return null; }
-  if (!sig.length || !salt.length || salt.length > 64) return null;
+  if (!Number.isSafeInteger(ts)) return no('timestamp');
+  if (Math.abs(Date.now() - ts) > 20 * 60e3) return no('clock');
+  let sig, salt; try { sig = b64d(b.signature); salt = b64d(b.salt); } catch (_) { return no('encoding'); }
+  if (!sig.length || !salt.length || salt.length > 64) return no('encoding');
   let key = certCache.get(url.href);
   if (!key) {
-    const r = await fetch(url.href);
-    if (!r.ok) return null;
-    const { spki, algo } = spkiFromCert(new Uint8Array(await r.arrayBuffer()));
-    key = { algo, k: await crypto.subtle.importKey('spki', spki, algo, false, ['verify']) };
+    let r; try { r = await fetch(url.href); } catch (_) { return no('apple_key_fetch'); }
+    if (!r.ok) return no('apple_key_' + r.status);
+    try {
+      const { spki, algo } = spkiFromCert(new Uint8Array(await r.arrayBuffer()));
+      key = { algo, k: await crypto.subtle.importKey('spki', spki, algo, false, ['verify']) };
+    } catch (e) { return no('apple_key_read'); }
     if (certCache.size > 20) certCache.clear();
     certCache.set(url.href, key);
   }
@@ -117,7 +123,7 @@ export async function verifyGameCenter(b, env) {
     if (key.algo.name === 'ECDSA') good = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key.k, ecRaw(sig, key.algo.namedCurve === 'P-256' ? 32 : 48), msg);
     else good = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key.k, sig, msg);
   } catch (_) { good = false; }
-  return good ? 'gc:' + pid : null;
+  return good ? { sub: 'gc:' + pid } : no('signature');
 }
 
 // ---- Google Play Games (Android) ----------------------------------------------

@@ -87,3 +87,33 @@ jobs:
           mode=$(echo "$cfg" | jq -r '.mode // "unreachable"' 2>/dev/null || echo unreachable)
           echo "::notice title=Shop API::$url mode=$mode"
           [ "$mode" = test ] || [ "$mode" = live ] || { echo "::error title=Shop API not answering::$url/config returned: $cfg"; exit 1; }
+
+      # Checks the Game Center sign-in path against Apple's real signing certificates: the
+      # server must be able to download and read Apple's key, so a made-up proof is refused
+      # only for its signature (anything else means iPhone players can't join Global Rankings).
+      - name: Game Center sign-in check
+        if: steps.check.outputs.ready == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          sub=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/subdomain" | jq -r '.result.subdomain // empty')
+          url="https://sling-shop.$sub.workers.dev"
+          found=""
+          for n in $(seq 20 -1 1); do
+            k="https://static.gc.apple.com/public-key/gc-prod-$n.cer"
+            if curl -fsS -o "gc-$n.cer" "$k" 2>/dev/null; then
+              found="$found $n"
+              node --input-type=module -e "import { spkiFromCert } from './shop-api/accounts.js'; import { readFileSync } from 'fs'; const { spki, algo } = spkiFromCert(new Uint8Array(readFileSync('gc-$n.cer'))); await crypto.subtle.importKey('spki', spki, algo, false, ['verify']); console.log('gc-prod-$n.cer read OK:', JSON.stringify(algo));" \
+                || { echo "::error title=Game Center key unreadable::gc-prod-$n.cer could not be read by the server code"; exit 1; }
+            fi
+          done
+          [ -n "$found" ] || { echo "::warning title=Game Center check::No Apple gc-prod certificates found to test"; exit 0; }
+          top=$(echo $found | awk '{print $1}')
+          body=$(jq -nc --arg u "https://static.gc.apple.com/public-key/gc-prod-$top.cer" --arg ts "$(date +%s%3N)" \
+            '{playerId:"T:_smoketest",bundleId:"com.slingandslide.game",publicKeyUrl:$u,timestamp:$ts,salt:"AAAAAA==",signature:"AAAA",name:"x"}')
+          res=$(curl -sS -X POST -H 'Content-Type: application/json' -d "$body" "$url/auth/gamecenter")
+          echo "Live server answer: $res"
+          why=$(echo "$res" | jq -r '.why // empty')
+          if [ "$why" = signature ]; then echo "::notice title=Game Center sign-in check::Apple keys$found read OK; live server reached Apple and checked the signature."
+          else echo "::error title=Game Center sign-in check::Live server refused before the signature check: $res"; exit 1; fi

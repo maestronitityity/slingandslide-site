@@ -11,7 +11,7 @@
 // Claiming again with the same device returns the same reward, and the game
 // ignores sessions it has already credited, so retries are safe.
 
-import { Hub, verifyGoogle, verifyGameCenter, verifyPlayGames } from './accounts.js';
+import { Hub, verifyGoogle, gcCheck, verifyPlayGames } from './accounts.js';
 export { Hub };
 
 export const ITEMS = {
@@ -201,9 +201,10 @@ async function account(req, env, h, path) {
   }
   if (m === 'POST' && path === '/auth/gamecenter') {
     const b = await req.json().catch(() => ({}));
-    const sub = await verifyGameCenter(b, env).catch(() => null);
-    if (!sub) return json({ error: 'bad_token' }, 401, h);
-    const r = await hubCall(env, 'login_gc', { sub, body: { name: b.name } });
+    // The reason goes in the error text: the app shows it ("the rankings server said …").
+    const v = await gcCheck(b, env).catch(() => ({ why: 'server' }));
+    if (!v.sub) { console.log('gamecenter refused: ' + v.why); return json({ error: 'bad_token: ' + v.why, why: v.why }, 401, h); }
+    const r = await hubCall(env, 'login_gc', { sub: v.sub, body: { name: b.name } });
     return json(r.body, r.status, h);
   }
   if (m === 'POST' && path === '/auth/playgames') {
