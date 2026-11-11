@@ -1,9 +1,10 @@
-// Global Rankings in the app (iPhone/iPad): the game's own Distance / Score / Height
+// Global Rankings in the app (iPhone/iPad and Android): the game's own Distance / Score / Height
 // boards for this hour, this month and all time, shared with slingandslide.com.
 // Loaded after native.js. In a normal browser it does nothing (the website has its own).
 //
-// Players join automatically with their Game Center name: Game Center gives the app a
-// signed proof of who the player is (verified by our server against Apple's key), so
+// Players join automatically with their Game Center name (iPhone/iPad) or Google Play Games
+// name (Android): the platform gives the app a proof of who the player is (checked by our
+// server with Apple or Google), so
 // nobody has to make an account or pick a name. Settings has "Remove me", which deletes
 // their rankings data from the server and stops the app from re-joining until they
 // choose to join again.
@@ -24,11 +25,17 @@
   if (!tok) me = null;
   const off = () => ls.get('ss_lb_off') === '1';
   const gcOn = () => !!(window.GC && window.GC.ok);
+  // iPhone/iPad sign in with Game Center, Android with Google Play Games. native.js sets window.GCP
+  // (identity, showLeaderboard) for whichever the phone has. An Android build without Play Games
+  // sign-in shows Global Rankings view-only.
+  const AND = C.getPlatform() === 'android', PN = AND ? 'Google Play Games' : 'Game Center';
+  const AUTH = AND ? '/auth/playgames' : '/auth/gamecenter';
+  const viewOnly = () => AND && !window.GCP;
 
   async function api(m, path, body) {
     const r = await fetch(API + path, { method: m, headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: 'Bearer ' + tok } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const j = await r.json().catch(() => ({}));
-    if (r.status === 401 && tok && path !== '/auth/gamecenter') { tok = null; me = null; ls.del('ss_tok'); ls.del('ss_me'); link(); }
+    if (r.status === 401 && tok && path !== AUTH) { tok = null; me = null; ls.del('ss_tok'); ls.del('ss_me'); link(); }
     return { s: r.status, j };
   }
 
@@ -62,14 +69,14 @@
     refresh();
   }
 
-  // ---- join with Game Center ----------------------------------------------------
+  // ---- join with Game Center / Play Games ------------------------------------
   let joining = false, joinErr = '';
   async function join() {
     if (off() || joining || !gcOn() || !window.GCP || !window.GCP.identity) return;
     joining = true; joinErr = '';
     try {
       const idn = await window.GCP.identity();
-      const r = await api('POST', '/auth/gamecenter', idn);
+      const r = await api('POST', AUTH, idn);
       if (r.s === 200 && r.j.token) {
         tok = r.j.token; me = { id: r.j.id, nick: r.j.nick };
         ls.set('ss_tok', tok); ls.set('ss_me', JSON.stringify(me));
@@ -81,12 +88,16 @@
   }
   addEventListener('gc-auth', () => join());
   addEventListener('gc-state', () => refresh());
-  // Why Game Center isn't signed in (Apple's own message where there is one), with Try again.
+  // Why Game Center / Play Games isn't signed in (the platform's own message where there is one), with Try again.
   const gcWhy = () => {
     const i = (window.GC && window.GC.info) || {};
-    if (i.waitingForSheet) return 'Game Center wants to show a sign-in screen. Tap Try again.';
-    if (i.error) return 'Game Center says: “' + esc(i.error) + '”';
-    return window.GC && window.GC.info ? 'Game Center isn\u2019t signed in for this game yet.' : 'Connecting to Game Center…';
+    if (i.waitingForSheet) return PN + ' wants to show a sign-in screen. Tap Try again.';
+    // Game Center won't show its sign-in screen again in this app after it was closed once (GKError 2),
+    // so Try again can't help: the player signs in from the Settings app instead.
+    if (!AND && (i.code === 2 || i.code === 6)) return 'Game Center isn\u2019t signed in. Open the <b>Settings app → Game Center</b> on this device and sign in, then come back to the game.';
+    if (!AND && i.code === 15) return 'Game Center doesn\u2019t recognise this version of the game yet. Please update the game from the App Store.';
+    if (i.error) return PN + ' says: “' + esc(i.error) + '”';
+    return window.GC && window.GC.info ? PN + ' isn\u2019t signed in for this game yet.' : 'Connecting to ' + PN + '…';
   };
   const retryBtn = (id) => (window.GC && window.GC.retry ? `<button id=${id}>Try again</button>` : '');
   const wireRetry = (root, id) => { const b = root.querySelector('#' + id); if (b) b.onclick = () => { b.disabled = true; b.textContent = 'Trying…'; window.GC.retry().finally(() => refresh()); }; };
@@ -98,11 +109,12 @@
     const r = baseShow.apply(this, arguments);
     const row = d.querySelector('#lbm .lbn');
     if (row) {
-      const gcb = gcOn() ? '<button id=ssgc>Game Center</button>' : '';
-      if (off()) row.innerHTML = `<div class=ssme>You're not in Global Rankings.</div><button id=ssjn>Join</button>`;
+      const gcb = gcOn() && !AND ? '<button id=ssgc>Game Center</button>' : '';
+      if (viewOnly()) row.innerHTML = `<div class=ssme>The top players worldwide. Posting your own scores from Android is coming soon.</div>`;
+      else if (off()) row.innerHTML = `<div class=ssme>You're not in Global Rankings.</div><button id=ssjn>Join</button>`;
       else if (tok && me) row.innerHTML = `<div class=ssme>Playing as <b>${esc(me.nick || '')}</b></div>${gcb}`;
       else if (gcOn()) { row.innerHTML = joinErr ? `<div class=ssme>Couldn't join Global Rankings (${esc(joinErr)}).</div><button id=ssjr>Try again</button>${gcb}` : `<div class=ssme>Joining Global Rankings…</div>${gcb}`; const jr = row.querySelector('#ssjr'); if (jr) jr.onclick = () => { jr.disabled = true; join(); }; }
-      else { row.innerHTML = `<div class=ssme>${gcWhy()} Your scores post once you're signed in to Game Center.</div>${retryBtn('ssgr')}`; wireRetry(row, 'ssgr'); }
+      else { row.innerHTML = `<div class=ssme>${gcWhy()} Your scores post once you're signed in to ${PN}.</div>${retryBtn('ssgr')}`; wireRetry(row, 'ssgr'); }
       const g = row.querySelector('#ssgc'); if (g) g.onclick = () => { try { window.GCP.showLeaderboard({}); } catch (_) {} };
       const jn = row.querySelector('#ssjn'); if (jn) jn.onclick = () => { ls.del('ss_lb_off'); join(); refresh(); };
     }
@@ -113,7 +125,7 @@
   window.lbRender = function () {
     const r = baseRender.apply(this, arguments);
     const f = d.getElementById('lbf');
-    if (f) f.textContent = f.textContent.replace(' View-only access: ask for Contributor access to post your score.', tok ? '' : ' Sign in to Game Center to post your scores.');
+    if (f) f.textContent = f.textContent.replace(' View-only access: ask for Contributor access to post your score.', tok ? '' : viewOnly() ? ' Posting scores from Android is coming soon.' : ' Sign in to ' + PN + ' to post your scores.');
     return r;
   };
 
@@ -123,13 +135,13 @@
   window.renderSet = function () {
     const r = baseSet.apply(this, arguments);
     const e = d.getElementById('setm'), dataBox = e && e.querySelector('.spd');
-    if (!dataBox) return r;
+    if (!dataBox || viewOnly()) return r;
     const box = d.createElement('div'); box.className = 'spd ssacc';
     if (off()) {
       box.innerHTML = `<b>Global Rankings</b><div class=ssme>You're not in Global Rankings.</div><div class=ssrow><button class=ssb2 id=ssjn2>Join Global Rankings</button></div>`;
       box.querySelector('#ssjn2').onclick = () => { ls.del('ss_lb_off'); join(); renderSet(); };
     } else if (tok && me) {
-      box.innerHTML = `<b>Global Rankings</b><div class=ssme>Playing as <b>${esc(me.nick || '')}</b> (your Game Center name).</div><div class=ssrow><button class="ssb2 ssdel" id=ssrm>${delArm ? 'Tap again to remove' : 'Remove me from Global Rankings'}</button></div><small>Removes your name and scores from Global Rankings. Your progress in the game stays.</small>`;
+      box.innerHTML = `<b>Global Rankings</b><div class=ssme>Playing as <b>${esc(me.nick || '')}</b> (your ${PN} name).</div><div class=ssrow><button class="ssb2 ssdel" id=ssrm>${delArm ? 'Tap again to remove' : 'Remove me from Global Rankings'}</button></div><small>Removes your name and scores from Global Rankings. Your progress in the game stays.</small>`;
       box.querySelector('#ssrm').onclick = async () => {
         if (!delArm) { delArm = 1; renderSet(); setTimeout(() => { delArm = 0; }, 5000); return; }
         delArm = 0; let ok = false; try { ok = (await api('POST', '/me/delete', {})).s === 200; } catch (_) {}
@@ -137,7 +149,7 @@
         else toast("Couldn't remove right now. Check your connection and try again.");
       };
     } else {
-      box.innerHTML = `<b>Global Rankings</b><div class=ssme>${gcOn() ? (joinErr ? 'Couldn\u2019t join: ' + esc(joinErr) : 'Joining…') : gcWhy() + ' Your scores post to Global Rankings once you\u2019re signed in to Game Center.'}</div>${gcOn() ? '' : '<div class=ssrow>' + retryBtn('ssgr2').replace('<button', '<button class=ssb2') + '</div>'}`;
+      box.innerHTML = `<b>Global Rankings</b><div class=ssme>${gcOn() ? (joinErr ? 'Couldn\u2019t join: ' + esc(joinErr) : 'Joining…') : gcWhy() + ' Your scores post to Global Rankings once you\u2019re signed in to ' + PN + '.'}</div>${gcOn() ? '' : '<div class=ssrow>' + retryBtn('ssgr2').replace('<button', '<button class=ssb2') + '</div>'}`;
       wireRetry(box, 'ssgr2');
     }
     dataBox.parentNode.insertBefore(box, dataBox);

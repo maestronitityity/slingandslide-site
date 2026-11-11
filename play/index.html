@@ -138,7 +138,7 @@ canvas{display:block}
 #menu .geq{position:absolute;top:-6px;right:-3px;background:#5fbf6a;font-size:9px;font-style:normal;font-weight:900;border-radius:6px;padding:1px 4px}
 /*gacha v112*/
 #gm .gmrev .mdl{pointer-events:auto;cursor:pointer}#gm .gmtip{display:block;margin-top:4px;font-size:11px;font-weight:800;opacity:.8}
-#gm .gmst{display:none;margin:6px auto 0;background:rgba(10,20,34,.88);border:2px solid var(--rc);border-radius:12px;padding:6px 10px;max-width:270px;pointer-events:auto;position:relative;z-index:6}#gm .gmrev.st .gmst{display:block}
+#gm .gmst{display:none;margin:6px auto 0;background:rgba(10,20,34,.88);border:2px solid var(--rc);border-radius:12px;padding:6px 10px;max-width:270px;pointer-events:auto;position:relative;z-index:6}#gm .gmrev.st .gmst{display:block}#gm .gmrev.st .gmtip{display:none}
 #gm .chip{pointer-events:auto;cursor:pointer}
 .ad{color:#7dff8a;font-weight:800;font-size:12px}.dsv{color:#ff8a80;font-weight:800;font-size:12px}.gd2{opacity:.9;font-weight:700;font-size:12px;margin-top:6px}
 #gcp{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;font-family:inherit;color:#fff}#gcp .gcbg{position:absolute;inset:0;background:rgba(5,12,22,.72)}
@@ -393,7 +393,7 @@ try{Object.assign(save,JSON.parse(localStorage.getItem('vs')||'{}'))}catch(e){}
 const COIN_RATE=.5;
 /* Quests created before the change: halve their unclaimed coin rewards once (x.h marks a quest as already at the new rate). */
 try{for(const L of [save.q&&save.q.dl,save.q&&save.q.wk])if(Array.isArray(L))for(const x of L)if(x&&x.r&&x.r[0]==='c'&&!x.c&&!x.h){x.r[1]=Math.max(5,Math.round(x.r[1]*COIN_RATE/5)*5);x.h=1}}catch(e){}
-if(!save.sk)save.sk={};if(!save.own)save.own={};save.own.chick=save.own.chick||1;save.own.lid=save.own.lid||1;if(!save.char)save.char='chick';if(!save.dev)save.dev='lid';save.pity=save.pity|0;save.npity=save.npity|0;save.dg=save.dg||0;save.st1=!!save.st1;save.jmp=Math.min(2,save.jmp|0);if(save.jmp>(save.sk.d2|0))save.sk.d2=save.jmp;if(save.sk.b4){save.sk.dv=Math.max(save.sk.dv|0,save.sk.b4);delete save.sk.b4}if(!save.ach)save.ach={};save.set=Object.assign({hap:1,zoom:1.8,ch:1,sh:1,spd:1,pts:1,gfx:1,sfx:.8,mus:.2,trk:-1,ostm:1,mus3:1,mus2:1},save.set||{});const SET=save.set;if(!SET.zm2){if(SET.zoom===1)SET.zoom=1.25;SET.zm2=1}/* camera starts fully zoomed out (180%); players still on the old 125% default move too */if(!SET.zm3){if(SET.zoom===1.25)SET.zoom=1.8;SET.zm3=1}SET.trk=-1;SET.ostm=1;if(!SET.mus2){SET.mus=.2;SET.mus2=1;SET.mus3=1}
+if(!save.sk)save.sk={};if(!save.own)save.own={};save.own.chick=save.own.chick||1;save.own.lid=save.own.lid||1;if(!save.char)save.char='chick';if(!save.dev)save.dev='lid';save.pity=save.pity|0;save.npity=save.npity|0;save.dg=save.dg||0;save.st1=!!save.st1;save.jmp=Math.min(2,save.jmp|0);if(save.jmp>(save.sk.d2|0))save.sk.d2=save.jmp;if(save.sk.b4){save.sk.dv=Math.max(save.sk.dv|0,save.sk.b4);delete save.sk.b4}if(!save.ach)save.ach={};save.set=Object.assign({hap:1,zoom:1.8,ch:1.4,sh:1,spd:1,pts:1,gfx:1,sfx:.8,mus:.2,trk:-1,ostm:1,mus3:1,mus2:1},save.set||{});const SET=save.set;if(!SET.zm2){if(SET.zoom===1)SET.zoom=1.25;SET.zm2=1}/* camera starts fully zoomed out (180%); players still on the old 125% default move too */if(!SET.zm3){if(SET.zoom===1.25)SET.zoom=1.8;SET.zm3=1}SET.trk=-1;SET.ostm=1;if(!SET.mus2){SET.mus=.2;SET.mus2=1;SET.mus3=1}
 /* ---- Haptics: taps and buzzes for key moments. In the app, native.js provides HAPTIC (the phone's haptic engine);
    in a browser navigator.vibrate is used where it exists (Android). Settings → Vibration turns it off.
    tick < light < medium < heavy; success / warning / error; buzz = 3 quick taps; rumble(n) = n heavy hits. */
@@ -1382,6 +1382,16 @@ function gmModel(box,it,col){try{
  m.position.sub(ct);const piv=new THREE.Group();piv.add(m);piv.scale.setScalar(k);piv.rotation.x=.22;sc.add(piv);
  cm.position.set(0,.4,7);cm.lookAt(0,0,0);cancelAnimationFrame(gmRaf);const t0=performance.now();
  const loop=()=>{if(!document.getElementById('gm')||!box.isConnected)return;const t=(performance.now()-t0)/1000;piv.rotation.y=t*1.2;piv.position.y=Math.sin(t*2.4)*.06;gmR.render(sc,cm);gmRaf=requestAnimationFrame(loop)};loop();return true}catch(e){return false}}
+/* Keeps the prize card (model, name, stats box) between the Skip button and the row of prizes
+   already won: moves it up first, then shrinks the model if it still doesn't fit. */
+function gmFit(rev){try{const g=document.getElementById('gm');if(!g||!rev)return;
+ const m=rev.querySelector('.mdl'),cv=m&&m.querySelector('canvas'),row=g.querySelector('.gmrow'),sk=g.querySelector('.gmskip');
+ const setH=h=>{if(!m)return;m.style.height=m.style.lineHeight=h+'px';if(cv){const w0=+cv.width/(gmR?gmR.getPixelRatio():1);cv.style.height=h+'px';cv.style.width=Math.round(w0*h/230)+'px'}};
+ setH(230);
+ const skB=sk&&getComputedStyle(sk).display!=='none'?sk.getBoundingClientRect().bottom:0,top0=Math.max(skB,10)+8,lim=(row?row.getBoundingClientRect().top:innerHeight-100)-10;
+ let h=rev.offsetHeight;const avail=lim-top0;
+ if(h>avail){setH(Math.max(60,Math.round(230-(h-avail))));h=rev.offsetHeight}
+ const c=Math.min(Math.max(innerHeight*.42,top0+h/2),Math.max(top0+h/2,lim-h/2));rev.style.top=Math.round(c)+'px'}catch(e){}}
 function gmClose(){const g=document.getElementById('gm');if(g)g.remove();lastRoll=null;showMenu(lastMsg)}
 function gmAgain(n){const g=document.getElementById('gm');if(g)g.remove();roll(n)}
 async function gmPlay(n){gmSkip=0;gmTS=n>1?1.25:1.4;const old=document.getElementById('gm');if(old)old.remove();
@@ -1416,9 +1426,10 @@ async function gmPlay(n){gmSkip=0;gmTS=n>1?1.25:1.4;const old=document.getElemen
   if(r>=2)rays.classList.add('on');
   const bx=innerWidth/2,by=innerHeight*.42;gmBurst(bx,by,col,[8,12,18,28,44,70][r],r);if(r>=4)gmBurst(bx,by,'#fff',16,r);
   await gsl(160);
-  rev.innerHTML=`<div class=mdl></div><div class=nm>${x.it.n}</div><div class=rk>${RAR[r].k} ${x.it.t==='c'?'Character':'Ride'}</div>${x.nw?'<span class=tg>NEW!</span>':x.rf?`<span class="tg r">Duplicate +${x.rf}💎</span>`:''}<small class=gmtip>👆 Tap the icon for stats</small><div class=gmst>${effHTML(x.it)}</div>`;rev.classList.remove('st');rev.querySelector('.mdl').onclick=()=>rev.classList.toggle('st');
+  rev.innerHTML=`<div class=mdl></div><div class=nm>${x.it.n}</div><div class=rk>${RAR[r].k} ${x.it.t==='c'?'Character':'Ride'}</div>${x.nw?'<span class=tg>NEW!</span>':x.rf?`<span class="tg r">Duplicate +${x.rf}💎</span>`:''}<small class=gmtip>👆 Tap the icon for stats</small><div class=gmst>${effHTML(x.it)}</div>`;rev.classList.remove('st');rev.querySelector('.mdl').onclick=()=>{rev.classList.toggle('st');gmFit(rev)};
   rev.classList.remove('show');void rev.offsetWidth;rev.classList.add('show');
   if(!gmModel(rev.querySelector('.mdl'),x.it,col))rev.querySelector('.mdl').textContent=x.it.e;
+  gmFit(rev);
   if(fast){await gmHold(g,i<L.length-1?'TAP TO CONTINUE':'TAP TO FINISH');rev.classList.remove('show');rev.style.opacity=0;w.classList.remove('dim');rays.classList.remove('on');chip(x);cap.className='gmcap';await gsl(120);rev.style.opacity=''}
  }
  q('.gmskip').style.display='none';
@@ -1590,7 +1601,7 @@ function renderSet(){const e=$('setm');if(!e)return;if(!setOpen){e.style.display
 function setV(k,v){SET[k]=+v;const a=SETS.find(x=>x[0]===k),l=$('sv_'+k);if(l&&a)l.textContent=a[7](SET[k]);persist();AU.vol();if(k==='sfx')AU.sfx('star')}
 function setT(k){SET[k]=SET[k]?0:1;if(k==='hap'&&SET.hap)hap('medium');if(k==='gfx'){R.setPixelRatio(SET.gfx?Math.min(devicePixelRatio*(window.__uiS||1),2.6):1);R.setSize(innerWidth,innerHeight)}persist();renderSet()}
 function setTrk(i){SET.trk=i;persist();AU.track(i);if((SET.mus??.5)<.05){SET.mus=.5;AU.vol()}renderSet()}
-function setDef(){Object.assign(SET,{zoom:1.8,ch:1,sh:1});persist();renderSet()}
+function setDef(){Object.assign(SET,{zoom:1.8,ch:1.4,sh:1});persist();renderSet()}
 function resetSave(){if(!rs){rs=1;renderSet();return}save={coins:0,gems:0,sl:0,gl:0,inc:0,ck:0,ld:0,best:0,xp:0,lvl:0,sp:0,sk:{},runs:0,tot:0,char:'chick',dev:'lid',own:{chick:1,lid:1},pity:0,npity:0,ach:{},set:SET};persist();dress();rs=0;setOpen=0;renderSet();showMenu('Progress reset')}
 let upT=0;
 function buy(k){const c=cost(k),gm=save.coins<c&&CARD.some(x=>x[0]===k),g=gcost(k);if(gm?save.gems<g:save.coins<c){fxBad=1;showMenu(lastMsg);return}fxOk=1;const [n,f,fmt]=STAT[k],b=f();if(gm){save.gems-=g;save.gu=save.gu||{};save.gu[k]=(save.gu[k]|0)+1}else save.coins-=c;save[k]++;persist();dress();showMenu(lastMsg);

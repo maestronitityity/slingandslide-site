@@ -24,6 +24,13 @@
     }
   }
   const GCP = platform === 'ios' ? C.registerPlugin('GameCenter') : null;
+  // Android: Google Play Games (PlayGamesPlugin.java, registered in MainActivity) does the same job for
+  // Global Rankings. Described here too in case Capacitor doesn't list it for the page.
+  if (platform === 'android') {
+    const H = (C.PluginHeaders = C.PluginHeaders || []);
+    if (!H.some((h) => h.name === 'PlayGames')) H.push({ name: 'PlayGames', methods: ['authenticate', 'status', 'identity'].map((name) => ({ name, rtype: 'promise' })) });
+  }
+  const PGP = platform === 'android' ? C.registerPlugin('PlayGames') : null;
 
   // ---- Product and leaderboard IDs (must match App Store Connect) ----------
   const PRE = 'com.slingandslide.game.';
@@ -99,6 +106,28 @@
     const imp = (style) => HP.impact({ style }).catch(() => {});
     const note = (type) => HP.notification({ type }).catch(() => {});
     const seq = (styles, gap) => styles.forEach((st, i) => setTimeout(() => imp(st), i * gap));
+    // Android: the plugin's impacts are 43-60 ms buzzes, which feel mushy and blur together during
+    // the slingshot ticks and the rocket's pulses. Short one-shot pulses feel like iPhone taps.
+    if (platform === 'android') {
+      const vib = (ms) => HP.vibrate({ duration: ms }).catch(() => {});
+      const pat = (ms, gap) => ms.forEach((m, i) => setTimeout(() => vib(m), i * gap));
+      const MS = { tick: 8, light: 14, medium: 24, heavy: 40 };
+      window.HAPTIC = (k, n) => {
+        if (MS[k]) return vib(MS[k]);
+        switch (k) {
+          case 'success': return pat([18, 30], 90);
+          case 'warning': return pat([30, 30], 110);
+          case 'error': return pat([40, 40, 60], 100);
+          case 'buzz': return pat([14, 14, 24], 110);
+          case 'rumble': { // n heavy hits, plus a longer rumble once it gets serious
+            const c = Math.max(1, Math.min(8, n | 0));
+            pat(Array(c).fill(40), 120);
+            if (c >= 3) setTimeout(() => vib(Math.min(700, 120 * c)), 120 * c);
+            return;
+          }
+        }
+      };
+    } else
     window.HAPTIC = (k, n) => {
       switch (k) {
         case 'tick': case 'light': return imp('LIGHT');
@@ -263,5 +292,19 @@
     };
     // The 🏆 button opens the game's Global Rankings (rankings.js), which has a
     // Game Center button for Apple's leaderboards.
+  } else if (PGP) {
+    // ---- Google Play Games (Android) ----------------------------------------
+    // Only used to join Global Rankings with the player's Play Games name (no Play Games leaderboards).
+    // A build without Play Games set up answers configured: false, and rankings stay view-only.
+    const authed = (r) => { const was = GC.ok; GC.info = r || null; GC.ok = !!(r && r.authenticated); dispatchEvent(new Event(GC.ok && !was ? 'gc-auth' : 'gc-state')); };
+    PGP.authenticate()
+      .then((r) => {
+        if (!r || !r.configured) return;
+        window.GCP = { identity: () => PGP.identity() }; // used by rankings.js
+        GC.retry = () => PGP.authenticate({ retry: true }).then(authed).catch((e) => authed({ authenticated: false, error: String((e && e.message) || e) }));
+        document.addEventListener('visibilitychange', () => { if (!document.hidden && !GC.ok) PGP.status().then(authed).catch(() => {}); });
+        authed(r);
+      })
+      .catch(() => {});
   }
 })();
