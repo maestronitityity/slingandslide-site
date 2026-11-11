@@ -120,7 +120,32 @@ export async function verifyGameCenter(b, env) {
   return good ? 'gc:' + pid : null;
 }
 
-// Game Center names are chosen and checked by Apple; we only tidy them up.
+// ---- Google Play Games (Android) ----------------------------------------------
+// The app asks Play Games for a one-time "server auth code" made out to our web OAuth client.
+// We swap it with Google for an access token (only our server has the client secret, so a code
+// made for any other app is useless here), then ask Play Games which player it belongs to.
+export async function verifyPlayGames(b, env) {
+  const code = String((b && b.serverAuthCode) || '');
+  if (!code || code.length > 1024 || /[\s"'<>]/.test(code)) return null;
+  const cid = env.PGS_CLIENT_ID || env.GOOGLE_CLIENT_ID;
+  if (!cid || !env.PGS_CLIENT_SECRET) return null;
+  const t = await fetch(env.PGS_TOKEN_URL || 'https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, client_id: cid, client_secret: env.PGS_CLIENT_SECRET, grant_type: 'authorization_code', redirect_uri: '' }),
+  });
+  if (!t.ok) return null;
+  const at = (await t.json().catch(() => ({}))).access_token;
+  if (!at) return null;
+  const p = await fetch((env.PGS_API || 'https://games.googleapis.com') + '/games/v1/players/me', { headers: { Authorization: 'Bearer ' + at } });
+  if (!p.ok) return null;
+  const pl = await p.json().catch(() => ({}));
+  const id = String(pl.playerId || '');
+  if (!/^[A-Za-z0-9_\-.:]{3,120}$/.test(id)) return null;
+  return { sub: 'pg:' + id, name: pl.displayName };
+}
+
+// Game Center and Play Games names are chosen and checked by Apple / Google; we only tidy them up.
 export function gcName(raw) {
   const n = String(raw || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069<>]/g, '').replace(/\s+/g, ' ').trim();
   return [...n].slice(0, 20).join('') || 'Player';
