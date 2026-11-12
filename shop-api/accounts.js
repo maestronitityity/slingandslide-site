@@ -223,7 +223,8 @@ export class Hub {
       CREATE TABLE IF NOT EXISTS lb (sub TEXT PRIMARY KEY, pid TEXT NOT NULL, doc TEXT NOT NULL, b INTEGER, s INTEGER, h INTEGER,
         mk TEXT, mb INTEGER, ms INTEGER, mh INTEGER, pk TEXT, pb INTEGER, ps INTEGER, ph INTEGER,
         uk INTEGER, ub INTEGER, us INTEGER, uh INTEGER, qk INTEGER, qb INTEGER, qs INTEGER, qh INTEGER, t INTEGER);
-      CREATE INDEX IF NOT EXISTS lb_b ON lb(b);`);
+      CREATE INDEX IF NOT EXISTS lb_b ON lb(b);
+      CREATE TABLE IF NOT EXISTS diag (k TEXT NOT NULL, t INTEGER NOT NULL);`);
   }
 
   one(q, ...a) { const r = this.sql.exec(q, ...a).toArray(); return r[0] || null; }
@@ -232,6 +233,23 @@ export class Hub {
     const { op, sub, tok, body } = await req.json();
     const R = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } });
     if (op === 'lb_get') return R({ docs: this.lbDocs() });
+    // Anonymous sign-in health (counts only, no names or IDs): which platforms are joining, and why
+    // Game Center / Play Games sign-ins get refused.
+    if (op === 'diag_note') { this.sql.exec('INSERT INTO diag (k, t) VALUES (?, ?)', String(body && body.k || '').slice(0, 60), Date.now()); this.sql.exec('DELETE FROM diag WHERE t < ?', Date.now() - 30 * 864e5); return R({ ok: true }); }
+    if (op === 'diag_get') {
+      const n = (q, ...a) => (this.one(q, ...a) || {}).n || 0;
+      const kinds = { gamecenter: 'gc:%', playgames: 'pg:%' };
+      const o = { now: Date.now(), players: {}, joinedLast7d: {}, onRankings: {}, lastJoin: {}, events7d: {} };
+      for (const [k, like] of Object.entries(kinds)) {
+        o.players[k] = n('SELECT COUNT(*) AS n FROM users WHERE sub LIKE ?', like);
+        o.joinedLast7d[k] = n('SELECT COUNT(*) AS n FROM users WHERE sub LIKE ? AND created > ?', like, Date.now() - 7 * 864e5);
+        o.onRankings[k] = n('SELECT COUNT(*) AS n FROM lb WHERE sub LIKE ?', like);
+        o.lastJoin[k] = (this.one('SELECT MAX(exp) AS m FROM sessions WHERE sub LIKE ?', like) || {}).m ? new Date(this.one('SELECT MAX(exp) AS m FROM sessions WHERE sub LIKE ?', like).m - SESSION_DAYS * 864e5).toISOString() : null;
+      }
+      o.players.google = n("SELECT COUNT(*) AS n FROM users WHERE sub NOT LIKE 'gc:%' AND sub NOT LIKE 'pg:%'");
+      for (const r of this.sql.exec('SELECT k, COUNT(*) AS c, MAX(t) AS last FROM diag WHERE t > ? GROUP BY k', Date.now() - 7 * 864e5).toArray()) o.events7d[r.k] = { count: r.c, last: new Date(r.last).toISOString() };
+      return R(o);
+    }
     if (op === 'login' || op === 'login_gc') {
       if (!this.one('SELECT sub FROM users WHERE sub = ?', sub)) this.sql.exec('INSERT INTO users (sub, pid, nick, nick_l, created) VALUES (?, ?, NULL, NULL, ?)', sub, 'p' + hex(crypto.getRandomValues(new Uint8Array(10))), Date.now());
       // Game Center players appear under their Game Center name (kept up to date; not

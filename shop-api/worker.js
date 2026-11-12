@@ -179,6 +179,17 @@ async function account(req, env, h, path) {
     const r = await hubCall(env, 'lb_get');
     return json(r.body, r.status, { ...h, 'Cache-Control': 'no-store' });
   }
+  if (m === 'GET' && path === '/diag') {
+    const r = await hubCall(env, 'diag_get');
+    return json(r.body, r.status, { ...h, 'Cache-Control': 'no-store' });
+  }
+  // The app reports where Game Center sign-in got stuck on the phone (a short code, nothing personal)
+  if (m === 'POST' && path === '/diag') {
+    const b = await req.json().catch(() => ({}));
+    const k = String(b.k || '').replace(/[^\w :.\-]/g, '').slice(0, 50);
+    if (k) await hubCall(env, 'diag_note', { body: { k: 'app: ' + k } }).catch(() => {});
+    return json({ ok: true }, 200, h);
+  }
   if (m === 'POST' && path === '/auth/google') {
     if (!env.GOOGLE_CLIENT_ID) return json({ error: 'not_configured' }, 503, h);
     const b = await req.json().catch(() => ({}));
@@ -203,14 +214,15 @@ async function account(req, env, h, path) {
     const b = await req.json().catch(() => ({}));
     // The reason goes in the error text: the app shows it ("the rankings server said …").
     const v = await gcCheck(b, env).catch(() => ({ why: 'server' }));
-    if (!v.sub) { console.log('gamecenter refused: ' + v.why); return json({ error: 'bad_token: ' + v.why, why: v.why }, 401, h); }
+    if (!v.sub) { await hubCall(env, 'diag_note', { body: { k: 'gamecenter refused: ' + v.why } }).catch(() => {}); return json({ error: 'bad_token: ' + v.why, why: v.why }, 401, h); }
     const r = await hubCall(env, 'login_gc', { sub: v.sub, body: { name: b.name } });
+    await hubCall(env, 'diag_note', { body: { k: 'gamecenter joined' } }).catch(() => {});
     return json(r.body, r.status, h);
   }
   if (m === 'POST' && path === '/auth/playgames') {
     const b = await req.json().catch(() => ({}));
     const v = await verifyPlayGames(b, env).catch(() => null);
-    if (!v) return json({ error: env.PGS_CLIENT_SECRET ? 'bad_token' : 'not_set_up' }, 401, h);
+    if (!v) { await hubCall(env, 'diag_note', { body: { k: 'playgames refused' } }).catch(() => {}); return json({ error: env.PGS_CLIENT_SECRET ? 'bad_token' : 'not_set_up' }, 401, h); }
     const r = await hubCall(env, 'login_gc', { sub: v.sub, body: { name: v.name } });
     return json(r.body, r.status, h);
   }
@@ -223,7 +235,7 @@ async function account(req, env, h, path) {
   const r = await hubCall(env, op, { tok, body });
   return json(r.body, r.status, h);
 }
-const ACCOUNT_PATHS = ['/lb', '/auth/google', '/auth/google/redirect', '/auth/gamecenter', '/auth/playgames', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
+const ACCOUNT_PATHS = ['/lb', '/diag', '/auth/google', '/auth/google/redirect', '/auth/gamecenter', '/auth/playgames', '/me', '/me/nick', '/me/delete', '/signout', '/save'];
 
 export default {
   async fetch(req, env) {
