@@ -267,7 +267,13 @@
     window.GCP = GCP; // used by rankings.js
     // GC.info keeps Game Center's last answer (error text etc.) for the rankings screen.
     const authed = (r) => { const was = GC.ok; GC.info = r || null; GC.ok = !!(r && r.authenticated); dispatchEvent(new Event(GC.ok && !was ? 'gc-auth' : 'gc-state')); };
-    GC.retry = () => GCP.authenticate({ retry: true }).then(authed).catch((e) => authed({ authenticated: false, error: String((e && e.message) || e) }));
+    // Never wait forever: if Game Center doesn't answer, say so (the rankings screen shows it with Try again).
+    const NO_ANSWER = { authenticated: false, error: 'Game Center isn\u2019t answering. Close the game fully and open it again.' };
+    const within = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), ms))]);
+    // authenticate can rightly wait while Apple's sign-in screen is up, so ask status (always instant) before giving up
+    const check = () => within(GCP.status(), 6000).then(authed).catch(() => { if (!GC.ok) authed(NO_ANSWER); });
+    GC.retry = () => within(GCP.authenticate({ retry: true }), 15000).then(authed).catch((e) => (String(e && e.message) === 'timeout' ? check() : authed({ authenticated: false, error: String((e && e.message) || e) })));
+    setTimeout(() => { if (!GC.info) check(); }, 12000);
     // Sign-in can finish after launch without telling us (or need the app on screen): check again when the game comes back.
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !GC.ok) GCP.status().then(authed).catch(() => {}); });
     GCP.addListener('authChanged', authed).catch(() => {});
