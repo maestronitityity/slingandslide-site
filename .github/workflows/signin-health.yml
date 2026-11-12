@@ -1,0 +1,19 @@
+name: Sign-in health
+
+# Run by hand: prints the rankings server's anonymous sign-in counts (no names or IDs):
+# how many Game Center / Play Games players have joined, and why any sign-ins were refused.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          r=$(curl -fsS https://sling-shop.slingandslide.workers.dev/diag)
+          echo "$r" | jq .
+          echo "::notice title=Sign-in health::$r"
